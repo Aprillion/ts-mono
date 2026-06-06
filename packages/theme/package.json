@@ -4,6 +4,18 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./tokens": {
+      "types": "./src/tokens.d.ts",
+      "default": "./src/tokens.css"
+    },
+    "./reboot": {
+      "types": "./src/reboot.d.ts",
+      "default": "./src/reboot.css"
+    },
+    "./components": {
+      "types": "./src/components.d.ts",
+      "default": "./src/components.css"
+    },
     "./base": {
       "types": "./src/base.d.ts",
       "default": "./src/base.css"
@@ -12,9 +24,9 @@
       "types": "./src/vscode.d.ts",
       "default": "./src/vscode.css"
     },
-    "./bootstrap": {
-      "types": "./src/bootstrap.ts",
-      "default": "./src/bootstrap.ts"
+    "./apply-theme": {
+      "types": "./src/apply-theme.ts",
+      "default": "./src/apply-theme.ts"
     }
   },
   "scripts": {

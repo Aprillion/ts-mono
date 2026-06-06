@@ -1,5 +1,7 @@
 import "bootstrap-icons/font/bootstrap-icons.css";
-import "bootstrap/dist/css/bootstrap.css";
+import "@tsmono/theme/tokens";
+import "@tsmono/theme/reboot";
+import "@tsmono/theme/components";
 
 import JSON5 from "json5";
 

@@ -1,0 +1,308 @@
+/**
+ * `--inspect-*` — the single semantic design-token system (source of truth).
+ *
+ * Light defaults live in `:root`; dark overrides in `:root[data-theme="dark"]`
+ * (only tokens that differ); the readable variant and the VS Code editor palette
+ * layer on top. Values are Bootstrap 5.3.8's own, so removing Bootstrap leaves the
+ * look unchanged — except `--inspect-radius` (3px) and `--inspect-code-foreground`
+ * (#8b0000), which keep the app's long-standing overrides.
+ *
+ * `data-theme="dark"` on <html> is the dark-mode signal — a cross-app contract
+ * shared with hawk (it sets the same attribute on the host document).
+ */
+
+:root {
+  /* Foreground / text */
+  --inspect-foreground: #212529;
+  --inspect-emphasis-foreground: #000;
+  --inspect-muted-foreground: rgba(33, 37, 41, 0.75);
+  --inspect-faint-foreground: rgba(33, 37, 41, 0.5);
+  /* Solid neutral for muted *fills* (dots/chips) — opaque, unlike the
+     translucent --inspect-muted-foreground used for text. */
+  --inspect-muted: #6c757d;
+
+  /* Background / surface */
+  --inspect-background: #fff;
+  --inspect-surface: #f8f9fa;
+  --inspect-surface-muted: #e9ecef;
+  --inspect-surface-hover: #f8f9fa;
+
+  /* Border / shape */
+  --inspect-border: #dee2e6;
+  --inspect-border-subtle: #e9ecef;
+  --inspect-radius: 3px;
+  --inspect-radius-lg: 4px;
+  --inspect-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+
+  /* Typography */
+  --inspect-font-mono:
+    SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+    monospace;
+  --inspect-font-family:
+    system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", "Noto Sans",
+    "Liberation Sans", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji",
+    "Segoe UI Symbol", "Noto Color Emoji";
+  --inspect-font-weight: 400;
+  --inspect-line-height: 1.5;
+
+  /* Inspect font sizes */
+  --inspect-font-size-title: 1.5rem;
+  --inspect-font-size-title-secondary: 1.3rem;
+  --inspect-font-size-largest: 1.2rem;
+  --inspect-font-size-larger: 1.1rem;
+  --inspect-font-size-large: 1rem;
+  --inspect-font-size-base: 0.9rem;
+  --inspect-font-size-small: 0.8rem;
+  --inspect-font-size-smaller: 0.8rem;
+  --inspect-font-size-smallest: 0.7rem;
+  --inspect-font-size-smallestest: 0.6rem;
+
+  /* Links */
+  --inspect-link: #0d6efd;
+  --inspect-link-hover: #0a58ca;
+
+  /* Status roles */
+  --inspect-primary: #0d6efd;
+  --inspect-primary-surface: #cfe2ff;
+  --inspect-primary-border: #9ec5fe;
+  --inspect-primary-emphasis: #052c65;
+  --inspect-primary-rgb: 13, 110, 253;
+  --inspect-danger: #dc3545;
+  --inspect-danger-surface: #f8d7da;
+  --inspect-danger-border: #f1aeb5;
+  --inspect-danger-emphasis: #58151c;
+  /* Danger as *text* in the IDE uses errorForeground (text-tuned); kept off
+     --inspect-danger, which doubles as a solid fill — see the vscode block. */
+  --inspect-danger-foreground: #dc3545;
+  --inspect-success: #198754;
+  --inspect-success-surface: #d1e7dd;
+  --inspect-success-border: #a3cfbb;
+  --inspect-success-emphasis: #0a3622;
+  --inspect-warning: #ffc107;
+  --inspect-warning-surface: #fff3cd;
+  --inspect-warning-border: #ffe69c;
+  --inspect-warning-emphasis: #664d03;
+  --inspect-info-surface: #cff4fc;
+  --inspect-info-rgb: 13, 202, 240;
+  --inspect-muted-rgb: 108, 117, 125;
+
+  /* Palette + misc */
+  --inspect-orange: #fd7e14;
+  --inspect-red: #dc3545;
+  --inspect-gray-600: #6c757d;
+  --inspect-code-foreground: #8b0000;
+  --inspect-modal-margin: 0.25rem;
+
+  /* Focus rings (legacy names kept; consumed by component CSS) */
+  --inspect-focus-border-color: #86b7fe;
+  --inspect-focus-border-shadow: 0 0 0 0.25rem
+    rgba(var(--inspect-primary-rgb), 0.25);
+  --inspect-focus-border-gray-color: #808080;
+  --inspect-focus-border-gray-shadow: 0 0 0 0.25rem rgba(48, 48, 48, 0.25);
+  --inspect-inactive-selection-background: var(
+    --vscode-editor-inactiveSelectionBackground,
+    #d9d9d9
+  );
+  --inspect-active-selection-background: var(
+    --vscode-editor-selectionBackground,
+    #d7d4f0
+  );
+
+  /* Glass */
+  --inspect-glass-color: #000000;
+  --inspect-glass-opacity: 0.3;
+
+  /* Component surfaces with their own tokens (re-skinnable by the vscode bridge) */
+  --inspect-find-background: var(--inspect-background);
+  --inspect-find-foreground: var(--inspect-foreground);
+  --inspect-input-background: var(--inspect-background);
+  --inspect-input-foreground: var(--inspect-foreground);
+  --inspect-input-border: var(--inspect-border-subtle);
+  --inspect-diff-add-color: #dafbe1;
+  --inspect-diff-remove-color: #ffebe9;
+  --inspect-tool-output-bg: #f8f8f8;
+  --inspect-tool-output-color: inherit;
+  --inspect-tool-output-border: var(--inspect-border);
+
+  /* Message-label chip */
+  --inspect-msg-label-bg: #f3f3f6;
+  --inspect-msg-label-bg-hover: #ebebef;
+  --inspect-msg-label-border: #e4e4e9;
+  --inspect-msg-label-text: #5f5f68;
+
+  /* Readable-variant role bands (light base) — defined always, applied only
+     under [data-theme-variant="readable"]. */
+  --inspect-readable-user-bg: #f1eeea;
+  --inspect-readable-user-border: #857f78;
+  --inspect-readable-assistant-bg: #f6f1fe;
+  --inspect-readable-assistant-border: #694a8a;
+  --inspect-readable-thinking-bg: #f7f2ff;
+  --inspect-readable-tool-call-bg: #edf4fb;
+  --inspect-readable-tool-call-border: #415e79;
+  --inspect-readable-system-bg: #fdfdfd;
+  --inspect-readable-system-border: #a9abaf;
+  --inspect-readable-body-color: #11181f;
+}
+
+:root[data-theme="dark"] {
+  --inspect-foreground: #dee2e6;
+  --inspect-emphasis-foreground: #fff;
+  --inspect-muted-foreground: rgba(222, 226, 230, 0.75);
+  --inspect-faint-foreground: rgba(222, 226, 230, 0.5);
+  --inspect-background: #212529;
+  --inspect-surface-muted: #343a40;
+  --inspect-surface-hover: #2b3035;
+  --inspect-border: #495057;
+  --inspect-border-subtle: #495057;
+  --inspect-link: #6ea8fe;
+  --inspect-link-hover: #8bb9fe;
+  --inspect-primary-surface: #031633;
+  --inspect-primary-border: #084298;
+  --inspect-primary-emphasis: #6ea8fe;
+  --inspect-danger-surface: #2c0b0e;
+  --inspect-danger-border: #842029;
+  --inspect-danger-emphasis: #ea868f;
+  --inspect-success-surface: #051b11;
+  --inspect-success-border: #0f5132;
+  --inspect-success-emphasis: #75b798;
+  --inspect-warning-surface: #332701;
+  --inspect-warning-border: #997404;
+  --inspect-warning-emphasis: #ffda6a;
+  --inspect-info-surface: #032830;
+
+  --inspect-msg-label-bg: #2a2a2e;
+  --inspect-msg-label-bg-hover: #33333a;
+  --inspect-msg-label-border: #3a3a40;
+  --inspect-msg-label-text: #b4b4bd;
+
+  --inspect-readable-user-bg: #262421;
+  --inspect-readable-user-border: #8e8881;
+  --inspect-readable-assistant-bg: #251f2c;
+  --inspect-readable-assistant-border: #9575b9;
+  --inspect-readable-thinking-bg: #241f31;
+  --inspect-readable-tool-call-bg: #1c232a;
+  --inspect-readable-tool-call-border: #6c8aa7;
+  --inspect-readable-system-bg: #0a0b0d;
+  --inspect-readable-system-border: #67696f;
+  --inspect-readable-body-color: #e6e8ea;
+}
+
+:root[data-theme-variant="readable"] {
+  --inspect-foreground: var(--inspect-readable-body-color);
+}
+
+body[class^="vscode-"] {
+  /* The IDE owns the palette: map the editor's VS Code tokens onto ours. */
+  --inspect-foreground: var(--vscode-editor-foreground);
+  --inspect-emphasis-foreground: var(--vscode-editor-foreground);
+  --inspect-muted-foreground: var(--vscode-descriptionForeground);
+  --inspect-background: var(--vscode-editor-background);
+  --inspect-surface: var(--vscode-sideBar-background);
+  --inspect-light-bg-subtle: var(--vscode-sideBar-background);
+  --inspect-light-border-subtle: var(--vscode-sideBarSectionHeader-border);
+  --inspect-secondary-bg-subtle: var(--vscode-editorHoverWidget-background);
+  --inspect-surface-muted: var(--vscode-list-inactiveSelectionBackground);
+  --inspect-surface-hover: var(--vscode-list-hoverBackground);
+  --inspect-border: var(--vscode-editorGroup-border);
+  --inspect-border-subtle: var(--vscode-sideBarSectionHeader-border);
+  --inspect-link: var(--vscode-textLink-foreground);
+  --inspect-link-hover: var(--vscode-textLink-activeForeground);
+  --inspect-muted: var(--vscode-breadcrumb-foreground);
+  --inspect-code-foreground: var(--vscode-editorInfo-foreground);
+  --inspect-primary: var(--vscode-banner-iconForeground);
+  --inspect-primary-surface: var(--vscode-editor-selectionHighlightBackground);
+  --inspect-primary-emphasis: var(--vscode-editorLink-activeForeground);
+  --inspect-warning-surface: var(--vscode-inputValidation-warningBackground);
+  --inspect-warning-emphasis: var(--vscode-input-foreground);
+  --inspect-success-surface: var(--vscode-diffEditor-insertedTextBackground);
+  --inspect-danger-surface: var(--vscode-diffEditor-removedTextBackground);
+  --inspect-info-surface: var(--vscode-inputValidation-infoBackground);
+  --inspect-danger-foreground: var(--vscode-errorForeground);
+
+  --inspect-tool-output-bg: var(--vscode-textCodeBlock-background);
+  --inspect-tool-output-color: var(--vscode-editor-foreground);
+  --inspect-tool-output-border: var(--vscode-editorWidget-border);
+  --inspect-find-background: var(--vscode-editorWidget-background);
+  --inspect-find-foreground: var(--vscode-editorWidget-foreground);
+  --inspect-input-background: var(--vscode-input-background);
+  --inspect-input-foreground: var(--vscode-input-foreground);
+  --inspect-input-border: var(--vscode-input-border);
+  --inspect-diff-add-color: var(--vscode-diffEditor-insertedTextBackground);
+  --inspect-diff-remove-color: var(--vscode-diffEditor-removedTextBackground);
+  --inspect-glass-color: var(--vscode-editor-foreground);
+  --inspect-glass-opacity: 0.15;
+}
+
+/* Dialogs need widget-grade borders + validation/source-control accents so
+   content stays legible on dark VS Code themes (editorGroup-border is nearly
+   invisible there). Scoped overrides; component CSS reads these tokens. */
+body[class^="vscode-"] .modal {
+  --inspect-border: var(
+    --vscode-widget-border,
+    var(--vscode-editorWidget-border, var(--vscode-editorGroup-border))
+  );
+  --inspect-danger: var(--vscode-errorForeground);
+  --inspect-danger-surface: var(
+    --vscode-inputValidation-errorBackground,
+    var(--vscode-diffEditor-removedTextBackground)
+  );
+  --inspect-danger-emphasis: var(
+    --vscode-inputValidation-errorForeground,
+    var(--vscode-errorForeground)
+  );
+  --inspect-danger-border: var(
+    --vscode-inputValidation-errorBorder,
+    var(--vscode-errorForeground)
+  );
+  --inspect-muted-foreground: var(--vscode-descriptionForeground);
+  --inspect-success-emphasis: var(
+    --vscode-gitDecoration-addedResourceForeground,
+    var(--vscode-charts-green)
+  );
+  --inspect-warning-emphasis: var(
+    --vscode-gitDecoration-modifiedResourceForeground,
+    var(--vscode-charts-yellow)
+  );
+}
+
+/* ── Bootstrap-derived globals (palette rgb/subtle/emphasis, shadows, focus,
+   form validation) the component CSS reads. Bootstrap 5.3.8 values. ── */
+:root {
+  --inspect-body-color-rgb: 33, 37, 41;
+  --inspect-border-color-translucent: rgba(0, 0, 0, 0.175);
+  --inspect-border-radius-sm: 0.25rem;
+  --inspect-border-width: 1px;
+  --inspect-danger-rgb: 220, 53, 69;
+  --inspect-emphasis-color-rgb: 0, 0, 0;
+  --inspect-focus-ring-color: rgba(13, 110, 253, 0.25);
+  --inspect-light-bg-subtle: #fcfcfd;
+  --inspect-light-border-subtle: #e9ecef;
+  --inspect-secondary-bg-subtle: #e2e3e5;
+}
+
+:root[data-theme="dark"] {
+  --inspect-body-color-rgb: 222, 226, 230;
+  --inspect-border-color-translucent: rgba(255, 255, 255, 0.15);
+  --inspect-emphasis-color-rgb: 255, 255, 255;
+  --inspect-light-bg-subtle: #343a40;
+  --inspect-light-border-subtle: #495057;
+  --inspect-secondary-bg-subtle: #161719;
+}
+
+/* Bootstrap leaves these component font-sizes unset (null → inherit). */
+:root {
+  --inspect-nav-link-font-size: inherit;
+  --inspect-breadcrumb-font-size: inherit;
+}
+
+/* Ported from the app's base.css token layer (expressed via semantic tokens so
+   dark + VS Code behavior follows automatically). */
+:root {
+  --inspect-hint-foreground: var(--inspect-muted-foreground);
+  --inspect-tool-description-color: var(--inspect-muted-foreground);
+  --inspect-tool-error-color: var(--inspect-danger-foreground);
+  --inspect-tool-error-bg: rgba(var(--inspect-danger-rgb), 0.06);
+}
+
+:root[data-theme="dark"] {
+}

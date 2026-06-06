@@ -1,10 +1,10 @@
 .pager {
-  --bs-pagination-padding-x: 0.5em;
-  --bs-pagination-padding-y: 0.15em;
-  --bs-pagination-font-size: 0.8rem;
-  --bs-pagination-padding-x: 0.5em;
-  --bs-pagination-padding-y: 0;
-  --bs-pagination-border-radius: var(--bs-border-radius);
+  --inspect-pagination-padding-x: 0.5em;
+  --inspect-pagination-padding-y: 0.15em;
+  --inspect-pagination-font-size: 0.8rem;
+  --inspect-pagination-padding-x: 0.5em;
+  --inspect-pagination-padding-y: 0;
+  --inspect-pagination-border-radius: var(--inspect-radius);
   margin-bottom: 0;
 }
 
@@ -19,7 +19,7 @@
 
 .item:first-child,
 .item:last-child {
-  --bs-pagination-padding-x: 0.3em;
+  --inspect-pagination-padding-x: 0.3em;
 }
 
 .item:first-child :global(.ii:before),

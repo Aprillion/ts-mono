@@ -1,109 +1,10 @@
-:root {
-  --bs-border-radius: 3px;
-  --bs-border-radius-lg: 4px;
-  --bs-popover-max-width: 50%;
-  --bs-code-color: #8b0000;
-  /* Secondary/italic guidance text (e.g. "optional" next to the Reason
-     label in the edit dialogs). Bootstrap's --bs-secondary-color is
-     readable on a light surface; in VS Code dark themes it disappears
-     against the dialog background, so this variable is re-pointed at
-     --vscode-descriptionForeground below. */
-  --inspect-hint-foreground: var(--bs-secondary-color);
-  --inspect-find-background: var(--bs-body-bg);
-  --inspect-find-foreground: var(--bs-body-color);
-  --inspect-input-background: var(--bs-body-bg);
-  --inspect-input-foreground: var(--bs-body-color);
-  --inspect-input-border: var(--bs-light-border-subtle);
-  --inspect-diff-add-color: #dafbe1;
-  --inspect-diff-remove-color: #ffebe9;
-  --inspect-inactive-selection-background: var(
-    --vscode-editor-inactiveSelectionBackground,
-    #d9d9d9
-  );
-  --inspect-active-selection-background: var(
-    --vscode-editor-selectionBackground,
-    #d7d4f0
-  );
-  --inspect-focus-border-color: #86b7fe;
-  --inspect-focus-border-shadow: 0 0 0 0.25rem rgba(var(--bs-primary-rgb), 0.25);
-  --inspect-focus-border-gray-color: #808080;
-  --inspect-focus-border-gray-shadow: 0 0 0 0.25rem rgba(48, 48, 48, 0.25);
-
-  /* Inspect Font Sizes */
-  --inspect-font-size-title: 1.5rem;
-  --inspect-font-size-title-secondary: 1.3rem;
-  --inspect-font-size-largest: 1.2rem;
-  --inspect-font-size-larger: 1.1rem;
-  --inspect-font-size-large: 1rem;
-  --inspect-font-size-base: 0.9rem;
-  --inspect-font-size-small: 0.8rem;
-  --inspect-font-size-smaller: 0.8rem;
-  --inspect-font-size-smallest: 0.7rem;
-  --inspect-font-size-smallestest: 0.6rem;
-
-  /* Inspect Glass */
-  --inspect-glass-color: #000000;
-  --inspect-glass-opacity: 0.3;
-
-  /* Tool messages — dedicated tokens so apps (and the vscode bridge) can
-     re-skin tool calls/outputs/errors without patching component CSS.
-     Defaults reproduce the previous hard-coded appearance. */
-  --inspect-tool-description-color: var(--bs-secondary-color);
-  --inspect-tool-output-bg: #f8f8f8;
-  --inspect-tool-output-color: inherit;
-  --inspect-tool-output-border: var(--bs-border-color);
-  --inspect-tool-error-color: var(--bs-danger);
-  --inspect-tool-error-bg: rgba(var(--bs-danger-rgb), 0.06);
-
-  /* Readable-variant role bands (light base). These tokens are DEFINED
-     always but only APPLIED under [data-theme-variant="readable"], so the
-     default design-consistent look is untouched — this is the "one small
-     override block per base mode" instead of a duplicated stylesheet. */
-  --inspect-readable-user-bg: #f1eeea;
-  --inspect-readable-user-border: #857f78;
-  --inspect-readable-assistant-bg: #f6f1fe;
-  --inspect-readable-assistant-border: #694a8a;
-  --inspect-readable-thinking-bg: #f7f2ff;
-  --inspect-readable-thinking-border: #8a74c4;
-  --inspect-readable-tool-call-bg: #edf4fb;
-  --inspect-readable-tool-call-border: #415e79;
-  --inspect-readable-system-bg: #fdfdfd;
-  --inspect-readable-system-border: #a9abaf;
-  --inspect-readable-body-color: #11181f;
-
-  /* Message-label chip. */
-  --inspect-msg-label-bg: #f3f3f6;
-  --inspect-msg-label-bg-hover: #ebebef;
-  --inspect-msg-label-border: #e4e4e9;
-  --inspect-msg-label-text: #5f5f68;
-}
-
-:root[data-bs-theme="dark"] {
-  --inspect-msg-label-bg: #2a2a2e;
-  --inspect-msg-label-bg-hover: #33333a;
-  --inspect-msg-label-border: #3a3a40;
-  --inspect-msg-label-text: #b4b4bd;
-
-  --inspect-readable-user-bg: #262421;
-  --inspect-readable-user-border: #8e8881;
-  --inspect-readable-assistant-bg: #251f2c;
-  --inspect-readable-assistant-border: #9575b9;
-  --inspect-readable-thinking-bg: #241f31;
-  --inspect-readable-thinking-border: #8c7fbf;
-  --inspect-readable-tool-call-bg: #1c232a;
-  --inspect-readable-tool-call-border: #6c8aa7;
-  --inspect-readable-system-bg: #0a0b0d;
-  --inspect-readable-system-border: #67696f;
-  --inspect-readable-body-color: #e6e8ea;
-}
-
 /* Readable variant: trade design consistency for transcript scannability —
    each turn gets a distinct tinted band + accent rule, and the tool tokens
    are pointed at the higher-contrast role colors. Roles are read off the
    `data-message-role` / `data-content-kind` attributes the chat components
    already emit (no per-role classes, no duplicated styles). */
 :root[data-theme-variant="readable"] {
-  --bs-body-color: var(--inspect-readable-body-color);
+  --inspect-foreground: var(--inspect-readable-body-color);
 }
 
 :root[data-theme-variant="readable"] [data-message-role] {
@@ -128,9 +29,9 @@
 :root[data-theme-variant="readable"] pre.tool-call-input,
 :root[data-theme-variant="readable"] div.tool-call-input {
   background-color: var(--inspect-readable-tool-call-bg);
-  border: 1px solid var(--bs-light-border-subtle);
+  border: 1px solid var(--inspect-light-border-subtle);
   border-left: 3px solid var(--inspect-readable-tool-call-border);
-  border-radius: var(--bs-border-radius);
+  border-radius: var(--inspect-radius);
   padding: 0.5em !important;
 }
 
@@ -149,7 +50,7 @@
 :root[data-theme-variant="readable"] [data-message-role] pre.tool-call-input,
 :root[data-theme-variant="readable"] [data-message-role] div.tool-call-input {
   background-color: var(--inspect-tool-output-bg);
-  border-left: 1px solid var(--bs-light-border-subtle);
+  border-left: 1px solid var(--inspect-light-border-subtle);
 }
 
 /* The tool call is its own peer block: under readable the whole box is the blue
@@ -203,8 +104,8 @@
 
 /* Light subtle box around tool output (standalone transcript tool events). */
 :root[data-theme-variant="readable"] .tool-output {
-  border: 1px solid var(--bs-light-border-subtle);
-  border-radius: var(--bs-border-radius);
+  border: 1px solid var(--inspect-light-border-subtle);
+  border-radius: var(--inspect-radius);
 }
 
 :root[data-theme-variant="readable"] [data-message-role="system"] {
@@ -220,24 +121,24 @@
 }
 
 body:not([class^="vscode-"]) button {
-  --bs-nav-pills-link-active-bg: #e3eaf1;
-  --bs-nav-pills-link-active-color: black;
-  --bs-nav-link-color: black;
+  --inspect-nav-pills-link-active-bg: #e3eaf1;
+  --inspect-nav-pills-link-active-color: black;
+  --inspect-nav-link-color: black;
 }
 
 /* AG Grid Theming */
 body {
-  --ag-background-color: var(--bs-body-bg);
-  --ag-foreground-color: var(--bs-body-color);
-  --ag-header-background-color: var(--bs-light-bg-subtle);
+  --ag-background-color: var(--inspect-background);
+  --ag-foreground-color: var(--inspect-foreground);
+  --ag-header-background-color: var(--inspect-light-bg-subtle);
   --ag-header-font-size: var(--inspect-font-size-small);
   --ag-header-font-weight: 500;
-  --ag-header-text-color: var(--bs-secondary);
-  --ag-font-family: var(--bs-body-font-family);
+  --ag-header-text-color: var(--inspect-muted);
+  --ag-font-family: var(--inspect-font-family);
   --ag-wrapper-border: none;
-  --ag-row-hover-color: var(--bs-secondary-bg-subtle);
-  --ag-selected-row-background-color: var(--bs-secondary-bg-subtle);
-  --ag-border-radius: var(--bs-border-radius);
+  --ag-row-hover-color: var(--inspect-secondary-bg-subtle);
+  --ag-selected-row-background-color: var(--inspect-secondary-bg-subtle);
+  --ag-border-radius: var(--inspect-radius);
 }
 
 #app {
@@ -253,19 +154,19 @@ body {
 }
 
 a {
-  color: var(--bs-link-color);
+  color: var(--inspect-link);
 }
 
 a:hover {
-  color: var(--bs-link-hover-color);
+  color: var(--inspect-link-hover);
 }
 
 .modal {
-  --bs-modal-margin: 0.25rem;
+  --inspect-modal-margin: 0.25rem;
 }
 
 .modal-backdrop {
-  --bs-backdrop-opacity: 0.4;
+  --inspect-backdrop-opacity: 0.4;
 }
 
 .app-main-grid.single-file-mode {
@@ -278,11 +179,11 @@ a:hover {
 }
 
 .text-style-secondary {
-  color: var(--bs-secondary) !important;
+  color: var(--inspect-muted) !important;
 }
 
 .text-style-tertiary {
-  color: var(--bs-tertiary-color) !important;
+  color: var(--inspect-faint-foreground) !important;
 }
 
 /* Inspect Font Size Styles */
@@ -337,65 +238,7 @@ a:hover {
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  max-height: calc(3em * var(--bs-body-line-height));
-}
-
-body[class^="vscode-"] {
-  /* Tool message tokens bridged to VS Code's editor widget palette so tool
-     calls read as embedded editor panels inside the IDE. */
-  --inspect-tool-description-color: var(--vscode-descriptionForeground);
-  --inspect-tool-output-bg: var(--vscode-textCodeBlock-background);
-  --inspect-tool-output-color: var(--vscode-editor-foreground);
-  --inspect-tool-output-border: var(--vscode-editorWidget-border);
-  --inspect-tool-error-color: var(--vscode-errorForeground);
-  --inspect-tool-error-bg: var(--vscode-inputValidation-errorBackground);
-
-  --bs-body-bg: var(--vscode-editor-background);
-  --bs-secondary-bg-subtle: var(--vscode-editorHoverWidget-background);
-  --bs-tertiary-bg: var(--vscode-list-hoverBackground);
-  --bs-primary-text-emphasis: var(--vscode-editorLink-activeForeground);
-  --bs-card-bg: var(--vscode-editor-background);
-  --bs-table-bg: var(--vscode-editor-background);
-  --bs-light-bg-subtle: var(--vscode-sideBar-background);
-  --bs-light-border-subtle: var(--vscode-sideBarSectionHeader-border);
-  --bs-body-color: var(--vscode-editor-foreground);
-  --bs-table-color: var(--vscode-editor-foreground);
-  --bs-accordion-btn-color: var(--vscode-editor-foreground);
-  --bs-emphasis-color: var(--vscode-editor-foreground);
-  --bs-navbar-brand-color: var(--vscode-editor-foreground);
-  --bs-navbar-brand-hover-color: var(--vscode-editor-foreground);
-  --bs-code-color: var(--vscode-editorInfo-foreground);
-  --bs-light: var(--vscode-sideBar-background);
-  --bs-btn-bg: var(--vscode-peekViewTitle-background);
-  --bs-primary: var(--vscode-banner-iconForeground);
-  --bs-primary-bg-subtle: var(--vscode-editor-selectionHighlightBackground);
-  --bs-nav-pills-link-active-bg: var(--vscode-banner-iconForeground);
-  --bs-link-color: var(--vscode-textLink-foreground);
-  --bs-link-hover-color: var(--vscode-textLink-activeForeground);
-  --bs-secondary: var(--vscode-breadcrumb-foreground);
-  --bs-secondary-bg: var(--vscode-list-inactiveSelectionBackground);
-  --bs-tertiary-bg: var(--vscode-list-hoverBackground);
-  --bs-border-color: var(--vscode-editorGroup-border);
-  --bs-card-border-color: var(--vscode-editorGroup-border);
-  --bs-warning-bg-subtle: var(--vscode-inputValidation-warningBackground);
-  --bs-warning-text-emphasis: var(--vscode-input-foreground);
-  --bs-success-bg-subtle: var(--vscode-diffEditor-insertedTextBackground);
-  --bs-danger-bg-subtle: var(--vscode-diffEditor-removedTextBackground);
-  --bs-info-bg-subtle: var(--vscode-inputValidation-infoBackground);
-  --bs-breadcrumb-divider-color: var(--vscode-foreground);
-  --inspect-find-background: var(--vscode-editorWidget-background);
-  --inspect-find-foreground: var(--vscode-editorWidget-foreground);
-  --inspect-input-background: var(--vscode-input-background);
-  --inspect-input-foreground: var(--vscode-input-foreground);
-  --inspect-input-border: var(--vscode-input-border);
-  /* descriptionForeground is the muted-but-readable text VS Code uses
-     for inline guidance (e.g. quick-pick descriptions). Matches the
-     editor's contrast tuning in both light and dark themes. */
-  --inspect-hint-foreground: var(--vscode-descriptionForeground);
-  --inspect-diff-add-color: var(--vscode-diffEditor-insertedTextBackground);
-  --inspect-diff-remove-color: var(--vscode-diffEditor-removedTextBackground);
-  --inspect-glass-color: var(--vscode-editor-foreground);
-  --inspect-glass-opacity: 0.15;
+  max-height: calc(3em * var(--inspect-line-height));
 }
 
 html.vscode {
@@ -408,8 +251,8 @@ html.vscode .sample-input {
 }
 
 body[class^="vscode-"] .modal-backdrop {
-  --bs-backdrop-opacity: 0.15;
-  --bs-backdrop-bg: var(--vscode-editor-foreground);
+  --inspect-backdrop-opacity: 0.15;
+  --inspect-backdrop-bg: var(--vscode-editor-foreground);
 }
 
 body[class^="vscode-"] code {
@@ -418,11 +261,11 @@ body[class^="vscode-"] code {
 
 body[class^="vscode-"] .popover.rendered-content,
 body[class^="vscode-"] .modal-dialog {
-  border: solid 1px var(--bs-border-color);
+  border: solid 1px var(--inspect-border);
 }
 
 body[class^="vscode-"] .popover-arrow::before {
-  border-left-color: var(--bs-border-color) !important;
+  border-left-color: var(--inspect-border) !important;
 }
 
 body[class^="vscode-"]
@@ -437,15 +280,11 @@ body[class^="vscode-"]
   [data-popper-placement^="right"]
   > .popper-arrow-container
   > div {
-  border-color: transparent transparent var(--bs-card-border-color) !important;
+  border-color: transparent transparent var(--inspect-border) !important;
 }
 
 body[class^="vscode-"] .modal-content {
   background-clip: unset;
-}
-
-body[class^="vscode-"] .multi-score-label {
-  margin-bottom: 5px;
 }
 
 body[class^="vscode-"] {
@@ -468,12 +307,6 @@ body[class^="vscode-"] .task-model {
   font-size: 0.9rem;
 }
 
-body[class^="vscode-"] .accordion-button::after {
-  --bs-accordion-btn-icon: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='black'%3e%3cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3e%3c/svg%3e");
-  background: white;
-  mask-image: var(--bs-accordion-btn-icon);
-}
-
 .copy-button i.bi,
 .download-scan-button i.bi,
 body[class^="vscode-"] .navbar-text i.bi {
@@ -481,61 +314,61 @@ body[class^="vscode-"] .navbar-text i.bi {
 }
 
 body[class^="vscode-"] .btn-tools {
-  --bs-btn-hover-bg: var(--vscode-peekViewTitle-background);
-  --bs-btn-bg: var(--vscode-peekViewTitle-background);
-  --bs-btn-border-color: var(--vscode-peekViewTitle-background);
-  --bs-btn-hover-border-color: var(--vscode-peekViewTitle-background);
-  --bs-btn-color: var(--vscode-peekViewTitleDescription-foreground);
-  --bs-btn-hover-color: var(--vscode-peekViewTitleDescription-foreground);
+  --inspect-btn-hover-bg: var(--vscode-peekViewTitle-background);
+  --inspect-btn-bg: var(--vscode-peekViewTitle-background);
+  --inspect-btn-border-color: var(--vscode-peekViewTitle-background);
+  --inspect-btn-hover-border-color: var(--vscode-peekViewTitle-background);
+  --inspect-btn-color: var(--vscode-peekViewTitleDescription-foreground);
+  --inspect-btn-hover-color: var(--vscode-peekViewTitleDescription-foreground);
 }
 
 body[class^="vscode-"] .btn-primary {
-  --bs-btn-bg: var(--vscode-button-background);
-  --bs-btn-border-color: var(--vscode-button-background);
-  --bs-btn-hover-bg: var(--vscode-button-hoverBackground);
-  --bs-btn-hover-border-color: var(--vscode-button-hoverBackground);
-  --bs-btn-color: var(--vscode-button-foreground);
-  --bs-btn-hover-color: var(--vscode-button-foreground);
-  --bs-btn-disabled-color: var(--vscode-button-foreground);
-  --bs-btn-disabled-bg: var(--vscode-button-background);
-  --bs-btn-disabled-border-color: var(--vscode-button-background);
-  --bs-btn-disabled-opacity: 0.8;
+  --inspect-btn-bg: var(--vscode-button-background);
+  --inspect-btn-border-color: var(--vscode-button-background);
+  --inspect-btn-hover-bg: var(--vscode-button-hoverBackground);
+  --inspect-btn-hover-border-color: var(--vscode-button-hoverBackground);
+  --inspect-btn-color: var(--vscode-button-foreground);
+  --inspect-btn-hover-color: var(--vscode-button-foreground);
+  --inspect-btn-disabled-color: var(--vscode-button-foreground);
+  --inspect-btn-disabled-bg: var(--vscode-button-background);
+  --inspect-btn-disabled-border-color: var(--vscode-button-background);
+  --inspect-btn-disabled-opacity: 0.8;
 }
 
 /* Inside modal dialogs (edit tags / edit metadata / scoring detail)
    the editor-tuned `--vscode-editorGroup-border` reads as nearly
    invisible against dark themes — chip strips, the metadata grid,
    and form-control inputs all lose their visual containers. Re-point
-   `--bs-border-color` to a widget-grade border so anything Bootstrap
+   `--inspect-border` to a widget-grade border so anything Bootstrap
    styles with the border-color token (chip outlines, input borders,
    table dividers, etc.) becomes legible. The fallback chain prefers
    widget/editorWidget borders (typically tuned by themes for popups)
    and only drops back to editorGroup-border if nothing else is set. */
 body[class^="vscode-"] .modal {
-  --bs-border-color: var(
+  --inspect-border: var(
     --vscode-widget-border,
     var(--vscode-editorWidget-border, var(--vscode-editorGroup-border))
   );
   /* Error banner inside dialogs: the global vscode block only re-points
-     `--bs-danger-bg-subtle` (at the diff-editor red wash), leaving
-     `--bs-danger-text-emphasis` and `--bs-danger-border-subtle` at
+     `--inspect-danger-surface` (at the diff-editor red wash), leaving
+     `--inspect-danger-emphasis` and `--inspect-danger-border` at
      Bootstrap's light-mode dark-red values — unreadable on a VS Code
      dark dialog. Use the editor's input-validation tokens (designed
      for exactly this purpose: a tinted background with readable
      foreground and a visible border) with a fallback to
      `errorForeground` for themes that only define the foreground.
-     Also re-point `--bs-danger` so the required-field asterisk picks
+     Also re-point `--inspect-danger` so the required-field asterisk picks
      up the same readable red. */
-  --bs-danger: var(--vscode-errorForeground);
-  --bs-danger-bg-subtle: var(
+  --inspect-danger: var(--vscode-errorForeground);
+  --inspect-danger-surface: var(
     --vscode-inputValidation-errorBackground,
     var(--vscode-diffEditor-removedTextBackground)
   );
-  --bs-danger-text-emphasis: var(
+  --inspect-danger-emphasis: var(
     --vscode-inputValidation-errorForeground,
     var(--vscode-errorForeground)
   );
-  --bs-danger-border-subtle: var(
+  --inspect-danger-border: var(
     --vscode-inputValidation-errorBorder,
     var(--vscode-errorForeground)
   );
@@ -546,13 +379,13 @@ body[class^="vscode-"] .modal {
      to descriptionForeground (matches the hint label) plus the
      editor's source-control accent colors so the categories stay
      distinguishable. (Removing already inherits the readable red
-     from `--bs-danger` re-pointed above.) */
-  --bs-secondary-color: var(--vscode-descriptionForeground);
-  --bs-success-text-emphasis: var(
+     from `--inspect-danger` re-pointed above.) */
+  --inspect-muted-foreground: var(--vscode-descriptionForeground);
+  --inspect-success-emphasis: var(
     --vscode-gitDecoration-addedResourceForeground,
     var(--vscode-charts-green)
   );
-  --bs-warning-text-emphasis: var(
+  --inspect-warning-emphasis: var(
     --vscode-gitDecoration-modifiedResourceForeground,
     var(--vscode-charts-yellow)
   );
@@ -582,55 +415,55 @@ body[class^="vscode-"] .modal .form-control::placeholder {
    native VS Code secondary buttons rather than the washed-out
    Bootstrap gray that has poor contrast in dark themes. */
 body[class^="vscode-"] .btn-secondary {
-  --bs-btn-bg: var(--vscode-button-secondaryBackground);
-  --bs-btn-border-color: var(--vscode-button-secondaryBackground);
-  --bs-btn-hover-bg: var(--vscode-button-secondaryHoverBackground);
-  --bs-btn-hover-border-color: var(--vscode-button-secondaryHoverBackground);
-  --bs-btn-color: var(--vscode-button-secondaryForeground);
-  --bs-btn-hover-color: var(--vscode-button-secondaryForeground);
-  --bs-btn-disabled-color: var(--vscode-button-secondaryForeground);
-  --bs-btn-disabled-bg: var(--vscode-button-secondaryBackground);
-  --bs-btn-disabled-border-color: var(--vscode-button-secondaryBackground);
-  --bs-btn-disabled-opacity: 0.8;
+  --inspect-btn-bg: var(--vscode-button-secondaryBackground);
+  --inspect-btn-border-color: var(--vscode-button-secondaryBackground);
+  --inspect-btn-hover-bg: var(--vscode-button-secondaryHoverBackground);
+  --inspect-btn-hover-border-color: var(
+    --vscode-button-secondaryHoverBackground
+  );
+  --inspect-btn-color: var(--vscode-button-secondaryForeground);
+  --inspect-btn-hover-color: var(--vscode-button-secondaryForeground);
+  --inspect-btn-disabled-color: var(--vscode-button-secondaryForeground);
+  --inspect-btn-disabled-bg: var(--vscode-button-secondaryBackground);
+  --inspect-btn-disabled-border-color: var(--vscode-button-secondaryBackground);
+  --inspect-btn-disabled-opacity: 0.8;
 }
 
 body[class^="vscode-"] .navbar-brand {
-  --bs-navbar-brand-color: var(--vscode-sideBarSectionHeader-foreground);
-  --bs-navbar-brand-hover-color: var(--vscode-sideBarSectionHeader-foreground);
+  --inspect-navbar-brand-color: var(--vscode-sideBarSectionHeader-foreground);
+  --inspect-navbar-brand-hover-color: var(
+    --vscode-sideBarSectionHeader-foreground
+  );
 }
 
 body[class^="vscode-"] .navbar-text {
-  --bs-navbar-color: var(--vscode-sideBarSectionHeader-foreground);
-}
-
-body[class^="vscode-"] .accordion-item {
-  --bs-accordion-active-bg: var(--vscode-list-inactiveSelectionBackground);
+  --inspect-navbar-color: var(--vscode-sideBarSectionHeader-foreground);
 }
 
 body[class^="vscode-"] .card-header {
-  --bs-border-color: var(--vscode-editorGroup-border);
-  --bs-card-border-color: var(--vscode-editorGroup-border);
+  --inspect-border: var(--vscode-editorGroup-border);
+  --inspect-card-border-color: var(--vscode-editorGroup-border);
 }
 
 body[class^="vscode-"] .card {
-  --bs-border-color: var(--vscode-editorGroup-border);
-  --bs-card-border-color: var(--vscode-editorGroup-border);
+  --inspect-border: var(--vscode-editorGroup-border);
+  --inspect-card-border-color: var(--vscode-editorGroup-border);
 }
 
 body[class^="vscode-"] .nav-pills {
-  --bs-nav-pills-link-active-bg: var(--vscode-notifications-background);
-  --bs-nav-pills-link-active-color: var(--vscode-notifications-foreground);
+  --inspect-nav-pills-link-active-bg: var(--vscode-notifications-background);
+  --inspect-nav-pills-link-active-color: var(--vscode-notifications-foreground);
 }
 
 body[class^="vscode-"] .nav-link {
-  --bs-nav-link-color: var(--vscode-notificationLink-foreground);
-  --bs-link-hover-color: var(--vscode-notificationLink-foreground);
+  --inspect-nav-link-color: var(--vscode-notificationLink-foreground);
+  --inspect-link-hover: var(--vscode-notificationLink-foreground);
 }
 
 body[class^="vscode-"] .nav-link:hover {
-  --bs-nav-link-color: var(--vscode-notificationLink-foreground);
-  --bs-nav-link-hover-color: var(--vscode-notificationLink-foreground);
-  --bs-nav-tabs-link-hover-border-color: var(
+  --inspect-nav-link-color: var(--vscode-notificationLink-foreground);
+  --inspect-nav-link-hover-color: var(--vscode-notificationLink-foreground);
+  --inspect-nav-tabs-link-hover-border-color: var(
     --vscode-notificationLink-foreground
   );
 }
@@ -654,31 +487,12 @@ body[class^="vscode-"] .ansi-display {
   --ansiBrightWhite: var(--vscode-terminal-ansiBrightWhite);
 }
 
-body[class^="vscode-"] .sidebar .list-group {
-  --bs-tertiary-bg: var(--vscode-list-hoverBackground);
-  --bs-secondary-color: var(--vscode-foreground);
-  --bs-list-group-active-bg: var(--vscode-sideBarSectionHeader-background);
-  --bs-list-group-active-border-color: var(
-    --vscode-sideBarSectionHeader-background
-  );
-  --bs-list-group-action-active-bg: var(
-    --vscode-sideBarSectionHeader-background
-  );
-  --bs-list-group-active-color: var(--vscode-sideBarSectionHeader-foreground);
-}
-
 body[class^="vscode-"] .breadcrumb-item {
-  --bs-breadcrumb-divider-color: var(--vscode-foreground);
+  --inspect-breadcrumb-divider-color: var(--vscode-foreground);
 }
 
 body[class^="vscode-"] div.ap-control-bar .ap-fullscreen-button {
   display: none;
-}
-
-:root {
-  --bs-navbar-padding-y: 0;
-  --bs-navbar-brand-padding-y: 0;
-  --sidebar-width: 550px;
 }
 
 body {
@@ -689,7 +503,7 @@ body {
 .navbar {
   padding-top: 0;
   padding-bottom: 0;
-  background-color: var(--bs-light);
+  background-color: var(--inspect-surface);
   top: 0;
 }
 
@@ -724,7 +538,7 @@ body {
   }
 }
 
-[data-bs-theme="dark"] .navbar {
+[data-theme="dark"] .navbar {
   background-color: unset;
 }
 
@@ -736,10 +550,6 @@ body {
 .navbar-text {
   padding-top: 0px;
   padding-bottom: 0px;
-}
-
-#sidebarToggle > i.bi {
-  font-size: 1.5em;
 }
 
 .nav-link.active {
@@ -771,52 +581,17 @@ body {
   margin-bottom: 0;
 }
 
-.sidebar .list-group-item {
-  cursor: pointer;
-  border-left-width: none;
-  border-top: none;
-  border-right: none;
-  border-radius: 0;
-}
-
 .btn-tools {
-  --bs-btn-bg: var(--bs-secondary-bg-subtle);
-  --bs-btn-hover-bg: var(--bs-secondary-bg-subtle);
-  --bs-btn-border-color: var(--bs-secondary-bg-subtle);
-  --bs-btn-hover-border-color: var(--bs-secondary-bg-subtle);
-}
-
-.sidebar .list-group {
-  --bs-list-group-active-color: var(--bs-gray-700);
-  --bs-list-group-active-bg: var(--bs-gray-200);
-  --bs-list-group-active-border-color: var(--bs-gray-200);
-}
-
-[data-bs-theme="dark"] .sidebar .list-group {
-  --bs-list-group-active-color: var(--bs-gray-300);
-  --bs-list-group-active-bg: var(--bs-gray-800);
-  --bs-list-group-active-border-color: var(--bs-gray-800);
+  --inspect-btn-bg: var(--inspect-secondary-bg-subtle);
+  --inspect-btn-hover-bg: var(--inspect-secondary-bg-subtle);
+  --inspect-btn-border-color: var(--inspect-secondary-bg-subtle);
+  --inspect-btn-hover-border-color: var(--inspect-secondary-bg-subtle);
 }
 
 .markdown-content pre > code,
 .markdown-content pre {
   white-space: pre-wrap !important;
   word-wrap: anywhere !important;
-}
-
-.log pre code {
-  white-space: pre-wrap;
-  font-size: 0.9em;
-}
-
-.log pre[class*="language-"] {
-  margin: 0;
-  padding: 0.3em;
-}
-
-.log :not(pre) > code[class*="language-"],
-.log pre[class*="language-"] {
-  background-color: var(--bs-body-background);
 }
 
 .workspace pre[class*="language-"] {
@@ -826,19 +601,11 @@ body {
 
 .workspace :not(pre) > code[class*="language-"],
 .workspace pre[class*="language-"] {
-  background-color: var(--bs-body-background);
-}
-
-.tbd {
-  font-weight: 300;
-  opacity: 0.9;
-  width: 100%;
-  text-align: center;
-  padding-top: 10em;
+  background-color: var(--inspect-background);
 }
 
 code:not(.sourceCode):not(.source-code):not([class^="language-"]) {
-  color: var(--bs-code-color);
+  color: var(--inspect-code-foreground);
 }
 
 .token.attr-name,
@@ -847,7 +614,7 @@ code:not(.sourceCode):not(.source-code):not([class^="language-"]) {
 .token.inserted,
 .token.selector,
 .token.string {
-  color: var(--bs-body-color);
+  color: var(--inspect-foreground);
 }
 
 .token.operator {
@@ -858,16 +625,6 @@ pre[class*="language-"] {
   border: unset;
   border-radius: unset;
   box-shadow: unset;
-}
-
-.font-title {
-  font-size: 1.5rem;
-  font-weight: 600;
-}
-
-.font-subtitle {
-  font-size: 1.1rem;
-  font-weight: 200;
 }
 
 .tight-paragraphs p {
@@ -886,10 +643,6 @@ pre[class*="language-"] {
   padding: 0.1em 1em 0.1em 1em;
   font-size: 0.8rem;
   font-weight: 500;
-}
-
-.btn .btn-link {
-  cursor: pointer;
 }
 
 [aria-expanded="false"] .hide-when-collapsed {
@@ -917,35 +670,6 @@ pre[class*="language-"] {
   height: 0px !important;
 }
 
-.accordion-item:not(.no-highlight) .accordion-button:not(.collapsed) {
-  border-left: solid var(--bs-accordion-active-bg) 2px;
-  border-right: solid var(--bs-accordion-active-bg) 2px;
-  border-top: solid var(--bs-accordion-active-bg) 2px;
-  background-color: var(--bs-body-background);
-  color: var(--bs-body-color);
-}
-
-.accordion-item .accordion-button {
-  border-left: solid var(--bs-body-bg) 2px;
-  border-right: solid var(--bs-body-bg) 2px;
-  border-top: solid var(--bs-body-bg) 2px;
-  background-color: var(--bs-body-bg);
-  color: var(--bs-body-color);
-}
-
-.accordion-button[aria-expanded="true"] .giant-text-when-expanded {
-  font-weight: 500;
-  font-size: 0.9rem !important;
-  flex-grow: 40;
-  padding-top: 0rem;
-  padding-bottom: 0rem;
-}
-
-.accordion-button[aria-expanded="true"] .full-flex-basis-when-expanded {
-  flex-basis: content !important;
-  flex-shrink: 1;
-}
-
 .markdown-content h1,
 .markdown-content h2,
 .markdown-content h3,
@@ -970,66 +694,12 @@ pre[class*="language-"] {
   margin-bottom: 0em;
 }
 
-.accordion-item:not(.no-highlight) .collapse.show.highlight-when-expanded,
-.accordion-item:not(.no-highlight) .collapsing.highlight-when-expanded,
-.accordion-item:not(.no-highlight)
-  .accordion-button[aria-expanded="true"].highlight-when-expanded {
-  border-left: solid var(--bs-accordion-active-bg) 2px;
-  border-right: solid var(--bs-accordion-active-bg) 2px;
-  border-bottom: solid var(--bs-accordion-active-bg) 2px;
-}
-
-.accordion-item.no-highlight .accordion-button {
-  background-color: var(--bs-body-bg);
-}
-
-.accordion-button.toggle-rotated:after {
-  background-size: 0.8em;
-  height: 0.8em;
-  width: 0.8em;
-}
-
-.accordion-header > :last-child::after,
-.accordion-button:last-child:after {
-  color: white !important;
-}
-
-.card .accordion-button.toggle-rotated:after {
-  margin-right: 1rem;
-}
-
-.no-highlight,
-.no-highlight:hover,
-.no-highlight:active {
-  color: inherit;
-}
-
-.toggle-rotated:before {
-  transition: transform 0.3s linear;
-}
-
-[aria-expanded="false"] .toggle-rotated:before {
-  transform: none;
-}
-
-[aria-expanded="true"] .toggle-rotated:before {
-  transform: rotate(90deg);
-}
-
-.fadeout-when-not-collapsed:not(.collapsed) {
-  opacity: 0 !important;
-}
-
 table.table {
   width: unset;
 }
 
 .table > :not(caption) > * > * {
   background-color: unset;
-}
-
-table.table.table-sm td {
-  padding: 0.1em;
 }
 
 .popover.rendered-content {
@@ -1066,12 +736,12 @@ table.table.table-sm td {
   content: attr(data-tooltip);
   position: absolute;
   line-height: 1.25;
-  background: var(--bs-light);
-  color: var(--bs-body-color);
+  background: var(--inspect-surface);
+  color: var(--inspect-foreground);
   opacity: 1;
   padding: 4px 8px;
   border-radius: 4px;
-  border: 1px solid var(--bs-border-color);
+  border: 1px solid var(--inspect-border);
   box-shadow: 0 2px 10px 0 rgba(0, 0, 0, 0.25);
   white-space: pre-wrap;
   width: max-content;
@@ -1180,14 +850,14 @@ pre[class*="language-"].tool-output,
 pre[class*="language-"].tool-output {
   border: none !important;
   box-shadow: none !important;
-  border-radius: var(--bs-border-radius) !important;
+  border-radius: var(--inspect-radius) !important;
 }
 
 .vscode-dark pre.jsonPanel {
   background: none !important;
   border: none !important;
   box-shadow: none !important;
-  border-radius: var(--bs-border-radius) !important;
+  border-radius: var(--inspect-radius) !important;
 }
 
 /* lightbox styles */
@@ -1211,8 +881,8 @@ pre[class*="language-"].tool-output {
 
 .jsondiffpatch-delta {
   padding: 1em;
-  background: var(--bs-light);
-  font-family: var(--bs-font-monospace);
+  background: var(--inspect-surface);
+  font-family: var(--inspect-font-mono);
   font-size: 0.9em;
 }
 .jsondiffpatch-delta pre {

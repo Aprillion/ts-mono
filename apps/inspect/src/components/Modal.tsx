@@ -65,7 +65,6 @@ export const Modal: FC<ModalProps> = ({
                   "text-size-smaller",
                   styles.btnClose
                 )}
-                data-bs-dismiss="modal"
                 aria-label="Close"
                 onClick={() => {
                   setShowing(!showing);
@@ -92,7 +91,6 @@ export const Modal: FC<ModalProps> = ({
                 <button
                   type="button"
                   className="btn btn-secondary"
-                  data-bs-dismiss="modal"
                   onClick={() => {
                     setShowing(!showing);
                   }}

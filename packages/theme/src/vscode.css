@@ -194,7 +194,7 @@
   --vscode-keybindingTable-rowsBackground: rgba(128, 128, 128, 0.04);
 }
 
-:root[data-bs-theme="dark"] {
+:root[data-theme="dark"] {
   color-scheme: dark;
 
   /* Core colors */
