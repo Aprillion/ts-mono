@@ -68,7 +68,11 @@
   color: var(--inspect-muted-foreground);
   padding: 2px 7px;
   border-radius: 999px;
-  background: color-mix(in oklab, var(--inspect-muted-foreground) 15%, transparent);
+  background: color-mix(
+    in oklab,
+    var(--inspect-muted-foreground) 15%,
+    transparent
+  );
 }
 
 @keyframes gen-sweep {

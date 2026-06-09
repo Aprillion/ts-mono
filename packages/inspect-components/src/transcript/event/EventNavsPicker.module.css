@@ -10,7 +10,10 @@
   cursor: pointer;
   /* `.nav-link.active` colors only apply inside a `.nav-pills` parent;
      the picker button isn't nested in one, so apply them directly. */
-  background-color: var(--inspect-nav-pills-link-active-bg, var(--inspect-primary));
+  background-color: var(
+    --inspect-nav-pills-link-active-bg,
+    var(--inspect-primary)
+  );
   color: var(--inspect-nav-pills-link-active-color, #fff);
 }
 
