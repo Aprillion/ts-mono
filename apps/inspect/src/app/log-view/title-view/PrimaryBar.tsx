@@ -58,14 +58,7 @@ export const PrimaryBar: FC<PrimaryBarProps> = ({
 
   return (
     <div className={clsx(styles.wrapper)}>
-      <div
-        className={clsx(
-          "navbar-brand",
-          "navbar-text",
-          "mb-0",
-          styles.container
-        )}
-      >
+      <div className={clsx("navbar-brand", "navbar-text", styles.container)}>
         <div className={styles.body}>
           <div className={styles.bodyContainer}>
             <div
