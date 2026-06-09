@@ -511,15 +511,14 @@ export const PopOver: React.FC<PopOverProps> = ({
 
       {showArrow && (
         <>
-          {/* Invisible div for Popper.js to use as reference */}
+          {/* Arrow container — also the element Popper measures (via `arrowRef`)
+              so the real arrow size is kept inside the popover. A separate
+              zero-size ref made Popper position it as a point, letting the 16px
+              arrow jut past the edge → horizontal scrollbar (overflowY:hidden
+              forces overflowX to auto). */}
           <div
             ref={arrowRef}
-            style={{ position: "absolute", visibility: "hidden" }}
             data-placement={getArrowDataPlacement()}
-          />
-
-          {/* Arrow container - positioned by Popper */}
-          <div
             className={clsx("popper-arrow-container", arrowClassName)}
             style={{
               ...popperStyles.arrow,
