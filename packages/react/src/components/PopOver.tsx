@@ -558,7 +558,8 @@ export const PopOver: React.FC<PopOverProps> = ({
                   height: 0,
                   borderStyle: "solid",
                   borderWidth: "8px 8px 0 8px",
-                  borderColor: "#eee transparent transparent transparent",
+                  borderColor:
+                    "var(--inspect-border) transparent transparent transparent",
                   top: "0px",
                   left: "0px",
                 }}
@@ -572,7 +573,8 @@ export const PopOver: React.FC<PopOverProps> = ({
                   height: 0,
                   borderStyle: "solid",
                   borderWidth: "0 8px 8px 8px",
-                  borderColor: "transparent transparent #eee transparent",
+                  borderColor:
+                    "transparent transparent var(--inspect-border) transparent",
                   top: "0px",
                   left: "0px",
                 }}
@@ -586,7 +588,8 @@ export const PopOver: React.FC<PopOverProps> = ({
                   height: 0,
                   borderStyle: "solid",
                   borderWidth: "8px 0 8px 8px",
-                  borderColor: "transparent transparent transparent #eee",
+                  borderColor:
+                    "transparent transparent transparent var(--inspect-border)",
                   top: "0px",
                   left: "0px",
                 }}
@@ -600,7 +603,8 @@ export const PopOver: React.FC<PopOverProps> = ({
                   height: 0,
                   borderStyle: "solid",
                   borderWidth: "8px 8px 8px 0",
-                  borderColor: "transparent #eee transparent transparent",
+                  borderColor:
+                    "transparent var(--inspect-border) transparent transparent",
                   top: "0px",
                   left: "0px",
                 }}
@@ -622,28 +626,32 @@ export const PopOver: React.FC<PopOverProps> = ({
                 // Top placement - pointing down
                 ...(actualPlacement.startsWith("top") && {
                   borderWidth: "7px 7px 0 7px",
-                  borderColor: "white transparent transparent transparent",
+                  borderColor:
+                    "var(--inspect-background) transparent transparent transparent",
                   top: "0px",
                 }),
 
                 // Bottom placement - pointing up
                 ...(actualPlacement.startsWith("bottom") && {
                   borderWidth: "0 7px 7px 7px",
-                  borderColor: "transparent transparent white transparent",
+                  borderColor:
+                    "transparent transparent var(--inspect-background) transparent",
                   top: "1px",
                 }),
 
                 // Left placement - pointing right
                 ...(actualPlacement.startsWith("left") && {
                   borderWidth: "7px 0 7px 7px",
-                  borderColor: "transparent transparent transparent white",
+                  borderColor:
+                    "transparent transparent transparent var(--inspect-background)",
                   left: "0px",
                 }),
 
                 // Right placement - pointing left
                 ...(actualPlacement.startsWith("right") && {
                   borderWidth: "7px 7px 7px 0",
-                  borderColor: "transparent white transparent transparent",
+                  borderColor:
+                    "transparent var(--inspect-background) transparent transparent",
                   left: "1px",
                 }),
               }}
