@@ -270,6 +270,7 @@ body[class^="vscode-"] .modal {
 :root {
   --inspect-body-color-rgb: 33, 37, 41;
   --inspect-border-color-translucent: rgba(0, 0, 0, 0.175);
+  --inspect-border-radius-pill: 50rem;
   --inspect-border-radius-sm: 0.25rem;
   --inspect-border-width: 1px;
   --inspect-danger-rgb: 220, 53, 69;
