@@ -528,7 +528,6 @@ const SearchPanelWithData = ({
         offset={[0, 2]}
         hoverDelay={-1}
         closeOnMouseLeave={false}
-        showArrow={false}
         styles={{
           padding: 0,
           width: "20rem",

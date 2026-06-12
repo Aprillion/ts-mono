@@ -16,14 +16,12 @@ interface PopOverProps {
   setIsOpen: (isOpen: boolean) => void;
   positionEl: HTMLElement | null;
   placement?: Placement;
-  showArrow?: boolean;
   offset?: [number, number];
   usePortal?: boolean;
   hoverDelay?: number;
   closeOnMouseLeave?: boolean;
 
   className?: string | string[];
-  arrowClassName?: string | string[];
 
   children: ReactNode;
   styles?: CSSProperties;
@@ -39,17 +37,14 @@ export const PopOver: React.FC<PopOverProps> = ({
   positionEl,
   children,
   placement = "bottom",
-  showArrow = true,
   offset = [0, 8],
   className = "",
-  arrowClassName = "",
   usePortal = true,
   hoverDelay = 250,
   closeOnMouseLeave = true,
   styles = {},
 }) => {
   const popperRef = useRef<HTMLDivElement | null>(null);
-  const arrowRef = useRef<HTMLDivElement | null>(null);
   const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(
     null
   );
@@ -280,26 +275,6 @@ export const PopOver: React.FC<PopOverProps> = ({
     { name: "offset", options: { offset } },
     { name: "preventOverflow", options: { padding: 8 } },
     {
-      name: "arrow",
-      enabled: showArrow,
-      options: {
-        // Latent — see meridianlabs-ai/ts-mono#90. `arrowRef.current` is
-        // null on the first render, so the arrow modifier initially has
-        // no element. The force-update useEffect below schedules a
-        // popper recompute after refs attach, and the `positionedThisOpen`
-        // gating hides the popover (visibility: hidden, offscreen) until
-        // popper has positioned it for this open cycle — so the
-        // unpositioned-arrow render never paints. Migrating to a
-        // state-backed `arrowElement` is the textbook fix but the
-        // existing belt-and-suspenders gating means there is no
-        // user-visible symptom today; deferring until the broader
-        // popper-ref migration.
-        // eslint-disable-next-line react-hooks/refs
-        element: arrowRef.current,
-        padding: 5, // This keeps the arrow from getting too close to the corner
-      },
-    },
-    {
       name: "computeStyles",
       options: {
         gpuAcceleration: false,
@@ -365,17 +340,11 @@ export const PopOver: React.FC<PopOverProps> = ({
 
   // Force update when needed refs change.
   //
-  // This effect papers over the stale-null reads of `popperRef.current` /
-  // `arrowRef.current` passed to usePopper above (see meridianlabs-ai/ts-mono#90).
-  // A 10ms setTimeout gives the callback refs time to attach, then we ask
-  // popper to recompute against the now-populated DOM nodes. Including
-  // `arrowRef.current` in the dep array is intentional: re-running this
-  // effect when the arrow node attaches is exactly what makes the
-  // workaround load-bearing. Reading `.current` during render to derive
-  // the dep is the reason for the `react-hooks/refs` suppression, and
-  // the lint rule can't see that the read drives effect scheduling
-  // (hence `exhaustive-deps`). Removing this effect requires the
-  // state-backed migration prescribed by #90.
+  // This effect papers over the stale-null read of `popperRef.current`
+  // passed to usePopper above (see meridianlabs-ai/ts-mono#90). A 10ms
+  // setTimeout gives the callback refs time to attach, then we ask popper
+  // to recompute against the now-populated DOM node. Removing this effect
+  // requires the state-backed migration prescribed by #90.
   useEffect(() => {
     if (update && isOpen && shouldShowPopover) {
       const timer = setTimeout(() => {
@@ -383,8 +352,7 @@ export const PopOver: React.FC<PopOverProps> = ({
       }, 10);
       return () => clearTimeout(timer);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps, react-hooks/refs
-  }, [update, isOpen, shouldShowPopover, showArrow, arrowRef.current]);
+  }, [update, isOpen, shouldShowPopover]);
 
   // When the popover is shown and positioned, track mouse enter/leave on the popover itself
   // and use that to block dismissal while hovering over the popover
@@ -441,18 +409,6 @@ export const PopOver: React.FC<PopOverProps> = ({
     };
   }, [isOpen, shouldShowPopover, state?.placement, closeOnMouseLeave]);
 
-  // Define arrow data-* attribute based on placement
-  const getArrowDataPlacement = () => {
-    if (!state || !state.placement) return placement;
-    return state.placement;
-  };
-
-  // Get the actual placement from Popper state
-  const actualPlacement = state?.placement || placement;
-
-  // For a CSS triangle, we use the border trick
-  // A CSS triangle doesn't need separate border styling like a rotated square would
-
   // Popper container styles
   const defaultPopperStyles: CSSProperties = {
     backgroundColor: "var(--inspect-background)",
@@ -508,157 +464,6 @@ export const PopOver: React.FC<PopOverProps> = ({
       {...attributes.popper}
     >
       {children}
-
-      {showArrow && (
-        <>
-          {/* Arrow container — also the element Popper measures (via `arrowRef`)
-              so the real arrow size is kept inside the popover. A separate
-              zero-size ref made Popper position it as a point, letting the 16px
-              arrow jut past the edge → horizontal scrollbar (overflowY:hidden
-              forces overflowX to auto). */}
-          <div
-            ref={arrowRef}
-            data-placement={getArrowDataPlacement()}
-            className={clsx("popper-arrow-container", arrowClassName)}
-            style={{
-              ...popperStyles.arrow,
-              position: "absolute",
-              zIndex: 1,
-              // Size and positioning based on placement - smaller arrow
-              ...(actualPlacement.startsWith("top") && {
-                bottom: "-8px",
-                width: "16px",
-                height: "8px",
-              }),
-              ...(actualPlacement.startsWith("bottom") && {
-                top: "-8px",
-                width: "16px",
-                height: "8px",
-              }),
-              ...(actualPlacement.startsWith("left") && {
-                right: "-8px",
-                width: "8px",
-                height: "16px",
-              }),
-              ...(actualPlacement.startsWith("right") && {
-                left: "-8px",
-                width: "8px",
-                height: "16px",
-              }),
-              // Content positioning
-              overflow: "hidden",
-            }}
-          >
-            {/* Border element (rendered behind) */}
-            {actualPlacement.startsWith("top") && (
-              <div
-                style={{
-                  position: "absolute",
-                  width: 0,
-                  height: 0,
-                  borderStyle: "solid",
-                  borderWidth: "8px 8px 0 8px",
-                  borderColor:
-                    "var(--inspect-border) transparent transparent transparent",
-                  top: "0px",
-                  left: "0px",
-                }}
-              />
-            )}
-            {actualPlacement.startsWith("bottom") && (
-              <div
-                style={{
-                  position: "absolute",
-                  width: 0,
-                  height: 0,
-                  borderStyle: "solid",
-                  borderWidth: "0 8px 8px 8px",
-                  borderColor:
-                    "transparent transparent var(--inspect-border) transparent",
-                  top: "0px",
-                  left: "0px",
-                }}
-              />
-            )}
-            {actualPlacement.startsWith("left") && (
-              <div
-                style={{
-                  position: "absolute",
-                  width: 0,
-                  height: 0,
-                  borderStyle: "solid",
-                  borderWidth: "8px 0 8px 8px",
-                  borderColor:
-                    "transparent transparent transparent var(--inspect-border)",
-                  top: "0px",
-                  left: "0px",
-                }}
-              />
-            )}
-            {actualPlacement.startsWith("right") && (
-              <div
-                style={{
-                  position: "absolute",
-                  width: 0,
-                  height: 0,
-                  borderStyle: "solid",
-                  borderWidth: "8px 8px 8px 0",
-                  borderColor:
-                    "transparent var(--inspect-border) transparent transparent",
-                  top: "0px",
-                  left: "0px",
-                }}
-              />
-            )}
-
-            {/* Actual triangle created with CSS borders, slightly smaller and offset to create border effect */}
-            <div
-              style={{
-                position: "absolute",
-                width: 0,
-                height: 0,
-                borderStyle: "solid",
-                backgroundColor: "transparent",
-                // Position relative to border triangle
-                left: "0px",
-                zIndex: 1,
-
-                // Top placement - pointing down
-                ...(actualPlacement.startsWith("top") && {
-                  borderWidth: "7px 7px 0 7px",
-                  borderColor:
-                    "var(--inspect-background) transparent transparent transparent",
-                  top: "0px",
-                }),
-
-                // Bottom placement - pointing up
-                ...(actualPlacement.startsWith("bottom") && {
-                  borderWidth: "0 7px 7px 7px",
-                  borderColor:
-                    "transparent transparent var(--inspect-background) transparent",
-                  top: "1px",
-                }),
-
-                // Left placement - pointing right
-                ...(actualPlacement.startsWith("left") && {
-                  borderWidth: "7px 0 7px 7px",
-                  borderColor:
-                    "transparent transparent transparent var(--inspect-background)",
-                  left: "0px",
-                }),
-
-                // Right placement - pointing left
-                ...(actualPlacement.startsWith("right") && {
-                  borderWidth: "7px 7px 7px 0",
-                  borderColor:
-                    "transparent var(--inspect-background) transparent transparent",
-                  left: "1px",
-                }),
-              }}
-            />
-          </div>
-        </>
-      )}
     </div>
   );
 
