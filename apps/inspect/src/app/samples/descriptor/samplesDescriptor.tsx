@@ -1,6 +1,6 @@
 import { ReactNode } from "react";
 
-import { inputString } from "@tsmono/inspect-common/utils";
+import { inputString, totalModelFallbacks } from "@tsmono/inspect-common/utils";
 import { arrayToString } from "@tsmono/util";
 
 import { ScoreValue } from "../../../@types/extraInspect";
@@ -333,6 +333,14 @@ export const createSamplesDescriptor = (
           sample.retries ? String(sample.retries).length + 2 : 0
         )
       );
+      const fallbacks = totalModelFallbacks(sample.model_fallbacks);
+      shape.fallbacksSize = Math.min(
+        10,
+        Math.max(
+          shape.fallbacksSize,
+          fallbacks ? String(fallbacks).length + 2 : 0
+        )
+      );
       shape.errorSize = Math.min(
         10,
         Math.max(
@@ -349,6 +357,7 @@ export const createSamplesDescriptor = (
       answerSize: 0,
       limitSize: 0,
       retriesSize: 0,
+      fallbacksSize: 0,
       errorSize: 0,
     }
   );

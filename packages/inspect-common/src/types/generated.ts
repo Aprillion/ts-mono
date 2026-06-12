@@ -959,12 +959,10 @@ export interface components {
          *     also accepted at the task and eval layers (where they participate in
          *     the per-field merge — precedence: eval > sample > task).
          *
-         *     The fields excluded from this base class — ``checkpoints_dir`` and
-         *     ``retention`` — are eval-wide concerns that the sample layer must
+         *     The fields excluded from this base class — ``checkpoints_location``
+         *     and ``retention`` — are eval-wide concerns that the sample layer must
          *     not influence. They live only on the derived :class:`CheckpointConfig`,
          *     which is the type used at the task and eval layers.
-         *
-         *     See ``design/plans/checkpointing-working.md`` §2.
          */
         CheckpointSampleConfig: {
             /** Max Consecutive Failures */
@@ -1622,6 +1620,8 @@ export interface components {
             metadata: {
                 [key: string]: unknown;
             };
+            /** Model Fallbacks */
+            model_fallbacks?: components["schemas"]["ModelFallback"][] | null;
             /** Model Usage */
             model_usage: {
                 [key: string]: components["schemas"]["ModelUsage"];
@@ -1732,6 +1732,8 @@ export interface components {
             metadata: {
                 [key: string]: unknown;
             };
+            /** Model Fallbacks */
+            model_fallbacks?: components["schemas"]["ModelFallback"][] | null;
             /** Model Usage */
             model_usage: {
                 [key: string]: components["schemas"]["ModelUsage"];
@@ -1997,6 +1999,8 @@ export interface components {
             extra_headers?: {
                 [key: string]: string;
             } | null;
+            /** Fallback Models */
+            fallback_models?: string[] | null;
             /** Frequency Penalty */
             frequency_penalty?: number | null;
             /** Internal Tools */
@@ -2652,6 +2656,25 @@ export interface components {
             working_time?: number | null;
         };
         /**
+         * ModelFallback
+         * @description A model fallback (request served by a different model than requested).
+         */
+        ModelFallback: {
+            /**
+             * Count
+             * @default 1
+             */
+            count: number;
+            /** Fallback Model */
+            fallback_model: string;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            } | null;
+            /** Model */
+            model: string;
+        };
+        /**
          * ModelOutput
          * @description Output from model generation.
          */
@@ -2668,6 +2691,7 @@ export interface components {
             completion: string;
             /** Error */
             error?: string | null;
+            fallback?: components["schemas"]["ModelFallback"] | null;
             /** Metadata */
             metadata?: {
                 [key: string]: unknown;

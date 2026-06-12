@@ -145,6 +145,7 @@
 }
 
 :root[data-theme="dark"] {
+  --inspect-tool-output-bg: #14171c;
   --inspect-foreground: #dee2e6;
   --inspect-emphasis-foreground: #fff;
   --inspect-muted-foreground: rgba(222, 226, 230, 0.75);

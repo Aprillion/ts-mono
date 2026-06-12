@@ -163,6 +163,13 @@ export const ModelEventView: FC<ModelEventViewProps> = ({
       ? `${panelTitle} · Cancelled${formatFailureTime(event)}`
       : formatTitle(panelTitle, totalUsage, callTime);
 
+  const fallback = event.output?.fallback;
+  const fallbackBadge = fallback ? (
+    <span className={styles.fallbackBadge}>
+      · fallback → {fallback.fallback_model}
+    </span>
+  ) : undefined;
+
   const turnLabel = context?.turnInfo
     ? `turn ${context.turnInfo.turnNumber}/${context.turnInfo.totalTurns}`
     : undefined;
@@ -188,7 +195,14 @@ export const ModelEventView: FC<ModelEventViewProps> = ({
       }
       icon={TranscriptIcons.model}
       turnLabel={turnLabel}
-      headerExtra={retryChip}
+      headerExtra={
+        fallbackBadge || retryChip ? (
+          <>
+            {fallbackBadge}
+            {retryChip}
+          </>
+        ) : undefined
+      }
       eventCallbacks={eventCallbacks}
       collapsibleContent
     >

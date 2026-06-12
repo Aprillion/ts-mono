@@ -24,6 +24,7 @@ import type {
   LogUpdate,
   MessagePoolData,
   ModelEvent,
+  ModelFallback,
   ModelUsage,
   SampleInitEvent,
   SampleLimitEvent,
@@ -87,6 +88,7 @@ export interface SampleDataResponse {
   sampleData?: SampleData;
   status: "NotModified" | "NotFound" | "OK";
   has_more?: boolean;
+  complete?: boolean;
 }
 
 export interface SegmentRef {
@@ -97,8 +99,8 @@ export interface SegmentRef {
 
 export interface PendingSampleUrls {
   segments: SegmentRef[];
-  complete: boolean;
-  has_more: boolean;
+  complete?: boolean;
+  has_more?: boolean;
 }
 
 // Client-side types — looser than generated server types because they're
@@ -133,6 +135,7 @@ export interface SampleSummary {
   // Per-sample timing and token usage; populated by Inspect's Python
   // EvalSampleSummary.summary() and serialized into summaries.json.
   model_usage?: Record<string, ModelUsage>;
+  model_fallbacks?: ModelFallback[] | null;
   started_at?: string | null;
   completed_at?: string | null;
   total_time?: number | null;

@@ -1,28 +1,13 @@
 import clsx from "clsx";
-import { FC, RefObject, useCallback, useMemo, useState } from "react";
+import { FC, RefObject, useEffect, useState } from "react";
 
 import { EvalRetryError } from "@tsmono/inspect-common";
-import {
-  TranscriptCollapseState,
-  TranscriptLayout,
-} from "@tsmono/inspect-components/transcript";
-import {
-  ANSIDisplay,
-  Card,
-  CardBody,
-  CardHeader,
-  SegmentedControl,
-  ToolDropdownButton,
-} from "@tsmono/react/components";
 
+import { ApplicationIcons } from "../appearance/icons";
+
+import { RetryAttemptCard } from "./retry-display/RetryAttemptCard";
+import { RetryTerminalAnchor } from "./retry-display/RetryTerminalAnchor";
 import styles from "./SampleRetriedErrors.module.css";
-
-type RetryView = "error" | "events";
-
-const kViewSegments = [
-  { id: "error", label: "Error" },
-  { id: "events", label: "Events" },
-];
 
 interface SampleRetriedErrorsProps {
   id: string;
@@ -35,120 +20,47 @@ export const SampleRetriedErrors: FC<SampleRetriedErrorsProps> = ({
   retries,
   scrollRef,
 }) => {
-  const [selectedIndex, setSelectedIndex] = useState(0);
-  const [view, setView] = useState<RetryView>("error");
-
-  const onSegmentChange = useCallback((segmentId: string) => {
-    setView(segmentId as RetryView);
-  }, []);
-
-  const dropdownItems = useMemo(() => {
-    const items: Record<string, () => void> = {};
-    retries.forEach((_, index) => {
-      items[`Attempt ${index + 1}`] = () => setSelectedIndex(index);
-    });
-    return items;
-  }, [retries]);
-
-  const retry = retries[retries.length === 1 ? 0 : selectedIndex];
-  const hasEvents = !!retry.events?.length;
-
-  // Pre-seed collapsed state for state/store events so their
-  // collapsibleContent bodies start hidden (matching main transcript
-  // where they're hidden inside collapsed parent containers).
-  const initialCollapsed = useMemo(() => {
-    const ids: Record<string, boolean> = {};
-    for (const event of retry.events || []) {
-      if ((event.event === "state" || event.event === "store") && event.uuid) {
-        ids[event.uuid] = true;
-      }
-    }
-    return ids;
-  }, [retry.events]);
-
-  // Lightweight local collapse state for transcript event toggling.
-  // bulkCollapse applies defaults on first render, then clears itself
-  // so user toggles aren't overwritten — mirroring the main transcript pattern.
-  const [transcriptCollapsed, setTranscriptCollapsed] = useState<
-    Record<string, boolean> | undefined
-  >(undefined);
-  const [bulkCollapse, setBulkCollapse] = useState<
-    "collapse" | "expand" | undefined
-  >("expand");
-
-  // Always layer initialCollapsed under the current state so state/store
-  // events default to collapsed. User toggles override via spread order.
-  const effectiveCollapsed = useMemo(
-    () =>
-      transcriptCollapsed
-        ? { ...initialCollapsed, ...transcriptCollapsed }
-        : Object.keys(initialCollapsed).length > 0
-          ? initialCollapsed
-          : undefined,
-    [transcriptCollapsed, initialCollapsed]
+  // Accordion: default to the most recent failure (closest to the success).
+  const [expandedIndex, setExpandedIndex] = useState<number | null>(
+    retries.length - 1
   );
 
-  const collapseState = useMemo<TranscriptCollapseState>(
-    () => ({
-      transcript: effectiveCollapsed,
-      onCollapseTranscript: (nodeId: string, collapsed: boolean) =>
-        setTranscriptCollapsed((prev) => ({
-          ...prev,
-          [nodeId]: collapsed,
-        })),
-      onSetTranscriptCollapsed: (ids: Record<string, boolean>) => {
-        setTranscriptCollapsed(ids);
-        setBulkCollapse(undefined);
-      },
-    }),
-    [effectiveCollapsed]
-  );
+  // Reset accordion state when switching to a different sample (the same
+  // component instance can be reused across samples on the inline display path).
+  useEffect(() => {
+    setExpandedIndex(retries.length - 1);
+  }, [id, retries.length]);
+
+  const onToggleOpen = (index: number) => {
+    setExpandedIndex((cur) => (cur === index ? null : index));
+  };
 
   return (
-    <Card className={styles.card}>
-      <CardHeader>
-        <div className={styles.headerRow}>
-          <span>Retry Attempts</span>
-          <div className={styles.headerControls}>
-            {retries.length > 1 && (
-              <ToolDropdownButton
-                label={`Attempt ${selectedIndex + 1}`}
-                items={dropdownItems}
-                className={clsx("text-size-smallest", styles.attemptDropdown)}
-                dropdownClassName="text-size-smallest"
+    <div className={styles.panel}>
+      <div className={styles.sectionLabel}>Retry Attempts</div>
+      <div className={styles.timeline}>
+        <div className={styles.rail} aria-hidden="true" />
+        <div className={styles.items}>
+          {retries.map((retry, index) => (
+            <div className={styles.row} key={index}>
+              <div className={styles.dotGutter} aria-hidden="true">
+                <i
+                  className={clsx(ApplicationIcons.error, styles.statusIcon)}
+                />
+              </div>
+              <RetryAttemptCard
+                retry={retry}
+                attemptNumber={index + 1}
+                isOpen={expandedIndex === index}
+                onToggleOpen={() => onToggleOpen(index)}
+                listId={`sample-error-retries-${id}-${index}`}
+                scrollRef={scrollRef}
               />
-            )}
-            {hasEvents && (
-              <SegmentedControl
-                segments={kViewSegments}
-                selectedId={view}
-                onSegmentChange={onSegmentChange}
-              />
-            )}
-          </div>
+            </div>
+          ))}
+          <RetryTerminalAnchor retryCount={retries.length} />
         </div>
-      </CardHeader>
-      <CardBody>
-        {view === "error" ? (
-          <RetryTraceback retry={retry} />
-        ) : (
-          <div className="text-size-small">
-            <TranscriptLayout
-              events={retry.events || []}
-              scrollRef={scrollRef}
-              listId={`sample-error-retries-${id}`}
-              showSwimlanes={false}
-              collapseState={collapseState}
-              bulkCollapse={bulkCollapse}
-              eventNodeContext={{ inlineExpansionUX: true }}
-            />
-          </div>
-        )}
-      </CardBody>
-    </Card>
+      </div>
+    </div>
   );
 };
-
-const RetryTraceback: FC<{ retry: EvalRetryError }> = ({ retry }) => (
-  <ANSIDisplay output={retry.traceback_ansi} className={styles.ansi} />
-);

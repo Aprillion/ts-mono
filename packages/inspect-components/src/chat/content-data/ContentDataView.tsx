@@ -7,6 +7,7 @@ import { RecordTree } from "../../content/RecordTree";
 
 import { CompactionData, kCompactionMetadata } from "./CompactionData";
 import styles from "./ContentDataView.module.css";
+import { FallbackData, kFallbackMetadata } from "./FallbackData";
 import { WebSearch } from "./WebSearch";
 import { WebSearchContentData, WebSearchResults } from "./WebSearchResults";
 
@@ -66,6 +67,16 @@ const compactionDataRenderer: ContentDataRenderer = {
   },
 };
 
+const fallbackDataRenderer: ContentDataRenderer = {
+  name: "Fallback",
+  canRender: (data: RenderableData) => {
+    return Object.hasOwn(data, kFallbackMetadata);
+  },
+  render: (_id: string, data: RenderableData): ReactNode => {
+    return <FallbackData data={data} />;
+  },
+};
+
 const webSearchServerToolRenderer: ContentDataRenderer = {
   name: "WebSearch",
   canRender: (data: RenderableData) => {
@@ -118,6 +129,7 @@ const serverToolRenderer: ContentDataRenderer = {
 
 export const contentDataRenderers: ContentDataRenderer[] = [
   compactionDataRenderer,
+  fallbackDataRenderer,
   webSearchServerToolRenderer,
   webSearchResultsServerToolRenderer,
   serverToolRenderer,

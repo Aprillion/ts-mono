@@ -68,8 +68,8 @@ describe("fetchPendingSampleDataDirect", () => {
           { id: 2, member_name: "m2", direct_url: "https://example/seg-2" },
           { id: 3, member_name: "m3", direct_url: "https://example/seg-3" },
         ],
-        complete: false,
-        has_more: false,
+        complete: true,
+        has_more: true,
       });
 
       const result = await fetchPendingSampleDataDirect(
@@ -81,6 +81,8 @@ describe("fetchPendingSampleDataDirect", () => {
       );
 
       expect(result).toBeDefined();
+      expect(result!.complete).toBe(true);
+      expect(result!.has_more).toBe(true);
       expect(result!.sampleData.events.map((e) => e.id)).toEqual([
         0, 10, 20, 30,
       ]);
@@ -130,10 +132,10 @@ describe("fetchPendingSampleDataDirect", () => {
     expect(result).toBeUndefined();
   });
 
-  test("returns has_more from the URL manifest on the empty-segments short-circuit", async () => {
+  test("returns metadata from the URL manifest on the empty-segments short-circuit", async () => {
     const getUrls = vi.fn().mockResolvedValue({
       segments: [],
-      complete: false,
+      complete: true,
       has_more: true,
     });
 
@@ -146,6 +148,7 @@ describe("fetchPendingSampleDataDirect", () => {
     );
 
     expect(result).toBeDefined();
+    expect(result!.complete).toBe(true);
     expect(result!.has_more).toBe(true);
     expect(result!.sampleData).toEqual({
       events: [],
@@ -153,5 +156,23 @@ describe("fetchPendingSampleDataDirect", () => {
       message_pool: [],
       call_pool: [],
     });
+  });
+
+  test("defaults missing complete and has_more fields to false on the empty-segments short-circuit", async () => {
+    const getUrls = vi.fn().mockResolvedValue({
+      segments: [],
+    });
+
+    const result = await fetchPendingSampleDataDirect(
+      getUrls,
+      "log.eval",
+      "sample1",
+      0,
+      {}
+    );
+
+    expect(result).toBeDefined();
+    expect(result!.complete).toBe(false);
+    expect(result!.has_more).toBe(false);
   });
 });

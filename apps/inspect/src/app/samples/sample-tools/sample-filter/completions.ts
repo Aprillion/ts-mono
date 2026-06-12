@@ -637,7 +637,11 @@ export function getCompletions(
     if (varName === kSampleMetadataVariable) {
       return customRelationCompletions();
     }
-    if (varName === "has_error" || varName === "has_retries") {
+    if (
+      varName === "has_error" ||
+      varName === "has_retries" ||
+      varName === "has_fallbacks"
+    ) {
       return logicalOpCompletions();
     }
 

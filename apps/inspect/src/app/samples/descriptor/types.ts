@@ -50,5 +50,6 @@ export interface MessageShape {
   answerSize: number;
   limitSize: number;
   retriesSize: number;
+  fallbacksSize: number;
   errorSize: number;
 }

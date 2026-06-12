@@ -88,6 +88,7 @@ export type ContentVideo = S["ContentVideo"];
 // Model types
 export type ModelCall = S["ModelCall"];
 export type ModelConfig = S["ModelConfig"];
+export type ModelFallback = S["ModelFallback"];
 export type ModelOutput = S["ModelOutput"];
 export type ModelUsage = S["ModelUsage"];
 export type ChatCompletionChoice = S["ChatCompletionChoice"];

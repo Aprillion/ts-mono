@@ -24,6 +24,7 @@ export type GetPendingSampleDataUrls = (
 export interface DirectPendingResult {
   sampleData: SampleData;
   has_more: boolean;
+  complete: boolean;
 }
 
 /**
@@ -71,7 +72,8 @@ export const fetchPendingSampleDataDirect = async (
         message_pool: [],
         call_pool: [],
       },
-      has_more: urls.has_more,
+      has_more: urls.has_more === true,
+      complete: urls.complete === true,
     };
   }
 
@@ -93,7 +95,8 @@ export const fetchPendingSampleDataDirect = async (
   };
   return {
     sampleData: applyCursorFilter(out, cursors),
-    has_more: urls.has_more,
+    has_more: urls.has_more === true,
+    complete: urls.complete === true,
   };
 };
 

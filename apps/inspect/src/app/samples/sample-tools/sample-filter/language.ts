@@ -24,6 +24,7 @@ export const SAMPLE_VARIABLES: [string, string][] = [
   ["has_error", "Checks if the sample has an error"],
   ["has_limit", "Checks if the sample stopped due to a limit"],
   ["has_retries", "Checks if the sample has been retried"],
+  ["has_fallbacks", "Checks if any model fallback occurred in the sample"],
   [kSampleIdVariable, "The unique identifier of the sample"],
   [kSampleUuidVariable, "The globally unique identifier of the sample run"],
   ["input", "The sample input as a string"],
@@ -32,6 +33,10 @@ export const SAMPLE_VARIABLES: [string, string][] = [
   ["error", "The sample error message (or null)"],
   ["limit", "The limit kind that stopped the sample (or null)"],
   ["retries", "The number of times the sample was retried (0 if none)"],
+  [
+    "fallbacks",
+    "The number of generate calls served by a fallback model (0 if none)",
+  ],
   ["tokens", "Total tokens used across all models (or null)"],
   ["duration", "Total wall-clock time of the sample, in seconds (or null)"],
   [kSampleMetadataVariable, "Metadata associated with the sample"],

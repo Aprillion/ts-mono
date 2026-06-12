@@ -1,6 +1,6 @@
 import { compileExpression } from "filtrex";
 
-import { inputString } from "@tsmono/inspect-common/utils";
+import { inputString, totalModelFallbacks } from "@tsmono/inspect-common/utils";
 
 import { EvalSampleScore } from "../../../@types/extraInspect";
 import { FilterError, ScoreLabel } from "../../../app/types";
@@ -138,6 +138,7 @@ const sampleVariables = (
     has_error: !!sample.error,
     has_limit: !!sample.limit,
     has_retries: sample.retries !== undefined && sample.retries > 0,
+    has_fallbacks: totalModelFallbacks(sample.model_fallbacks) > 0,
     completed: sample.completed ?? true,
     id: sample.id,
     uuid: sample.uuid ?? null,
@@ -148,6 +149,7 @@ const sampleVariables = (
     error: sample.error ?? null,
     limit: sample.limit ?? null,
     retries: sample.retries ?? 0,
+    fallbacks: totalModelFallbacks(sample.model_fallbacks),
     tokens: totalTokens(sample),
     duration: sample.total_time ?? null,
     metadata: sample.metadata,

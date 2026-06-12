@@ -127,11 +127,22 @@ export function createSamplePolling(
         return false;
       }
 
-      const loadCompletedSample = async (message: string) => {
-        // A 404 from the server means that this sample has been flushed to the
-        // main eval file. We also take the same path when the log summary says
-        // the sample is complete but the buffer only returns empty deltas.
-        stopPollingTimer();
+      const loadCompletedSample = async (
+        message: string,
+        options: { missingSampleIsError: boolean }
+      ): Promise<PollingCallbackResult> => {
+        const keepStreaming = (): PollingCallbackResult => {
+          sampleActions.setSampleStatus("streaming");
+          return true;
+        };
+
+        const failLoad = (error: Error): PollingCallbackResult => {
+          stopPollingTimer();
+          sampleActions.setSampleError(error);
+          sampleActions.setSampleStatus("error");
+          sampleActions.setRunningEvents([]);
+          return false;
+        };
 
         try {
           log.debug(message);
@@ -157,28 +168,33 @@ export function createSamplePolling(
           }
 
           if (sample) {
+            stopPollingTimer();
             const migratedSample = resolveSample(sample);
 
             sampleActions.setSelectedSample(migratedSample, logFile);
             sampleActions.setSampleStatus("ok");
             sampleActions.setRunningEvents([]);
-          } else {
-            sampleActions.setSampleStatus("error");
-            sampleActions.setSampleError(
-              new Error("Unable to load sample - an unknown error occurred")
-            );
-            sampleActions.setRunningEvents([]);
+            return false;
           }
+
+          if (!options.missingSampleIsError) {
+            return keepStreaming();
+          }
+
+          return failLoad(
+            new Error("Unable to load sample - an unknown error occurred")
+          );
         } catch (e) {
           if (localAbort.signal.aborted) {
             return false;
           }
-          sampleActions.setSampleError(e as Error);
-          sampleActions.setSampleStatus("error");
-          sampleActions.setRunningEvents([]);
-        }
 
-        return false;
+          if (!options.missingSampleIsError) {
+            return keepStreaming();
+          }
+
+          return failLoad(e as Error);
+        }
       };
 
       // Snapshot cursors before the call so we can detect progress below.
@@ -202,18 +218,23 @@ export function createSamplePolling(
 
       if (sampleDataResponse?.status === "NotFound") {
         return await loadCompletedSample(
-          `LOADING COMPLETED SAMPLE AFTER FLUSH: ${summary.id}-${summary.epoch}`
+          `LOADING COMPLETED SAMPLE AFTER FLUSH: ${summary.id}-${summary.epoch}`,
+          { missingSampleIsError: true }
         );
       }
 
-      if (
-        shouldFinalizeStreamingSample(
-          sampleDataResponse,
-          hasCompletedLogSummary(store.getState(), summary.id, summary.epoch)
-        )
-      ) {
+      const completedInLog = hasCompletedLogSummary(
+        store.getState(),
+        summary.id,
+        summary.epoch
+      );
+      if (shouldFinalizeStreamingSample(sampleDataResponse, completedInLog)) {
+        const completedByPendingBuffer = sampleDataResponse?.complete === true;
         return await loadCompletedSample(
-          `LOADING COMPLETED SAMPLE AFTER SUMMARY UPDATE: ${summary.id}-${summary.epoch}`
+          completedByPendingBuffer
+            ? `LOADING COMPLETED SAMPLE AFTER BUFFER COMPLETE: ${summary.id}-${summary.epoch}`
+            : `LOADING COMPLETED SAMPLE AFTER SUMMARY UPDATE: ${summary.id}-${summary.epoch}`,
+          { missingSampleIsError: !completedByPendingBuffer }
         );
       }
 
@@ -370,16 +391,28 @@ export const hasSampleDataUpdates = (sampleData?: SampleData) => {
 export const shouldFinalizeStreamingSample = (
   sampleDataResponse: SampleDataResponse | undefined,
   completedInLog: boolean | undefined
-) => {
-  if (!completedInLog || !sampleDataResponse) {
+): boolean => {
+  if (!sampleDataResponse) {
     return false;
   }
 
-  return (
-    sampleDataResponse.status === "NotModified" ||
-    (sampleDataResponse.status === "OK" &&
-      !hasSampleDataUpdates(sampleDataResponse.sampleData))
-  );
+  if (sampleDataResponse.status === "NotModified") {
+    return completedInLog === true;
+  }
+
+  if (sampleDataResponse.status !== "OK") {
+    return false;
+  }
+
+  if (sampleDataResponse.has_more === true) {
+    return false;
+  }
+
+  if (!completedInLog && sampleDataResponse.complete !== true) {
+    return false;
+  }
+
+  return !hasSampleDataUpdates(sampleDataResponse.sampleData);
 };
 
 const resetPollingState = (state: PollingState) => {

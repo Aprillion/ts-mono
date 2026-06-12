@@ -6,7 +6,7 @@ import type {
 } from "ag-grid-community";
 import clsx from "clsx";
 
-import { inputString } from "@tsmono/inspect-common/utils";
+import { inputString, modelFallbackLines } from "@tsmono/inspect-common/utils";
 import { arrayToString, filename, formatNumber } from "@tsmono/util";
 
 import { ScoreLabel } from "../../../app/types";
@@ -474,6 +474,25 @@ export function buildSampleColumns(
       comparator: comparators.number,
       valueGetter: (params: ValueGetterParams<SampleRow>) =>
         params.data?.retries ?? params.data?.data?.retries,
+    },
+    {
+      colId: "fallbacks",
+      field: "fallbacks",
+      headerName: "Fallbacks",
+      // size for the header text — the cell value is just a small count
+      initialWidth: 95,
+      minWidth: 28,
+      sortable: true,
+      filter: "agNumberColumnFilter",
+      resizable: true,
+      cellStyle: { textAlign: "center" },
+      comparator: comparators.number,
+      valueGetter: (params: ValueGetterParams<SampleRow>) =>
+        params.data?.fallbacks,
+      tooltipValueGetter: (params) => {
+        const lines = modelFallbackLines(params.data?.data?.model_fallbacks);
+        return lines.length > 0 ? lines.join("\n") : undefined;
+      },
     }
   );
 

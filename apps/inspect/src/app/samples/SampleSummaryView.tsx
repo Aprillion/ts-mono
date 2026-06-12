@@ -1,7 +1,11 @@
 import clsx from "clsx";
 import { FC, Fragment, ReactNode } from "react";
 
-import { EvalSample, ProvenanceData } from "@tsmono/inspect-common/types";
+import {
+  EvalSample,
+  ModelFallback,
+  ProvenanceData,
+} from "@tsmono/inspect-common/types";
 import { inputString } from "@tsmono/inspect-common/utils";
 import { RenderedText } from "@tsmono/inspect-components/content";
 import { arrayToString } from "@tsmono/util";
@@ -55,6 +59,7 @@ interface SampleFields {
   answer?: string;
   limit?: string;
   retries?: number;
+  model_fallbacks?: ModelFallback[] | null;
   working_time?: EvalSampleWorkingTime;
   total_time?: EvalSample["total_time"];
   error?: string;
@@ -103,6 +108,7 @@ const resolveSample = (
     answer,
     limit,
     retries,
+    model_fallbacks: sample.model_fallbacks,
     working_time,
     total_time,
     error,
@@ -186,8 +192,25 @@ export const SampleSummaryView: FC<SampleSummaryViewProps> = ({
   if (taskName) {
     metaItems.push({ key: "task", content: taskName });
   }
-  if (modelText) {
-    metaItems.push({ key: "model", content: modelText });
+  const fallbackModels = [
+    ...new Set((fields.model_fallbacks ?? []).map((f) => f.fallback_model)),
+  ];
+  if (modelText || fallbackModels.length > 0) {
+    metaItems.push({
+      key: "model",
+      content: (
+        <>
+          {modelText}
+          {fallbackModels.length > 0 && (
+            <em>{` (fallback → ${fallbackModels.join(", ")})`}</em>
+          )}
+        </>
+      ),
+      title:
+        fallbackModels.length > 0
+          ? "Requests refused by the requested model were served by a fallback model"
+          : undefined,
+    });
   }
   if (fields.total_time) {
     metaItems.push({

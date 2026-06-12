@@ -38,6 +38,7 @@ Filter samples by:
   • Input, target and error regex search: input_contains, target_contains, error_contains
   • Samples with NaN scores: is_nan, e.g. "is_nan(score)" or "not is_nan(score)"
   • Samples that have been retried: has_retries
+  • Samples served by a fallback model: has_fallbacks
   • Sample Id: e.g. "id == 'sample123'"
   • Sample metadata: e.g. "metadata.key == 'value'"
 

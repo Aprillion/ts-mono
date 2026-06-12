@@ -11,7 +11,7 @@ import {
   useState,
 } from "react";
 
-import { inputString } from "@tsmono/inspect-common/utils";
+import { inputString, totalModelFallbacks } from "@tsmono/inspect-common/utils";
 import { NoContentsPanel, ToolButton } from "@tsmono/react/components";
 
 import { EvalLogStatus } from "../../../@types/extraInspect.ts";
@@ -250,6 +250,7 @@ export const SamplesTab: FC<SamplesTabProps> = ({
       if (id === "epoch") return epochs > 1;
       if (id === "limit") return !!shape?.limitSize;
       if (id === "retries") return !!shape?.retriesSize;
+      if (id === "fallbacks") return !!shape?.fallbacksSize;
       if (id === "error") return !!shape?.errorSize;
       if (id === "sampleUuid") return false;
       return true;
@@ -362,6 +363,7 @@ export const SamplesTab: FC<SamplesTabProps> = ({
         error: sample.error,
         limit: sample.limit,
         retries: sample.retries,
+        fallbacks: totalModelFallbacks(sample.model_fallbacks) || undefined,
         tokens,
         duration: sample.total_time ?? undefined,
       };

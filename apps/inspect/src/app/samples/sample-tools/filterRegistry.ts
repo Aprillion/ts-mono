@@ -56,6 +56,7 @@ const STATIC_ENTRIES: Array<[string, FilterVarMapping]> = [
   ],
   ["limit", { variable: "limit", kind: "string" }],
   ["retries", { variable: "retries", kind: "number" }],
+  ["fallbacks", { variable: "fallbacks", kind: "number" }],
 ];
 
 /** Build the column↔filtrex-variable registry. Score columns are added

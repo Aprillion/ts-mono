@@ -8,7 +8,7 @@ import { AgGridReact } from "ag-grid-react";
 import clsx from "clsx";
 import { FC, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { inputString } from "@tsmono/inspect-common/utils";
+import { inputString, totalModelFallbacks } from "@tsmono/inspect-common/utils";
 import { ProgressBar } from "@tsmono/react/components";
 
 import { ActivityBar } from "../../components/ActivityBar";
@@ -192,21 +192,24 @@ export const SamplesPanel: FC = () => {
     [logDetailsInPath]
   );
 
-  // Default visibility for unseeded columns. `error`/`limit`/`retries`
-  // auto-promote to visible when at least one sample carries that field.
+  // Default visibility for unseeded columns. `error`/`limit`/`retries`/
+  // `fallbacks` auto-promote to visible when at least one sample carries
+  // that field.
   const optionalHasData = useMemo(() => {
     let error = false,
       limit = false,
-      retries = false;
+      retries = false,
+      fallbacks = false;
     outer: for (const details of Object.values(logDetailsInPath)) {
       for (const sample of details.sampleSummaries) {
         if (sample.error) error = true;
         if (sample.limit) limit = true;
         if (sample.retries) retries = true;
-        if (error && limit && retries) break outer;
+        if (sample.model_fallbacks?.length) fallbacks = true;
+        if (error && limit && retries && fallbacks) break outer;
       }
     }
-    return { error, limit, retries };
+    return { error, limit, retries, fallbacks };
   }, [logDetailsInPath]);
 
   const defaultsForUnseededColumns = useCallback(
@@ -215,6 +218,7 @@ export const SamplesPanel: FC = () => {
       if (id === "error") return optionalHasData.error;
       if (id === "limit") return optionalHasData.limit;
       if (id === "retries") return optionalHasData.retries;
+      if (id === "fallbacks") return optionalHasData.fallbacks;
       // `created` defaults off — many users won't care.
       if (id === "created") return false;
       if (id === "sampleUuid") return false;
@@ -319,6 +323,7 @@ export const SamplesPanel: FC = () => {
           error: sample.error,
           limit: sample.limit,
           retries: sample.retries,
+          fallbacks: totalModelFallbacks(sample.model_fallbacks) || undefined,
           completed: sample.completed,
           tokens,
           duration: sample.total_time ?? undefined,
