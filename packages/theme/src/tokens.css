@@ -187,9 +187,8 @@
   --inspect-readable-body-color: #e6e8ea;
 }
 
-:root[data-theme-variant="readable"] {
-  --inspect-foreground: var(--inspect-readable-body-color);
-}
+/* The readable-variant foreground override lives in base.css alongside the
+   rest of the readable skin. */
 
 body[class^="vscode-"] {
   /* The IDE owns the palette: map the editor's VS Code tokens onto ours. */
@@ -222,6 +221,10 @@ body[class^="vscode-"] {
   --inspect-tool-output-bg: var(--vscode-textCodeBlock-background);
   --inspect-tool-output-color: var(--vscode-editor-foreground);
   --inspect-tool-output-border: var(--vscode-editorWidget-border);
+  /* The :root fallback (danger-rgb at 6% opacity) is near-invisible on dark
+     IDE themes; tool-error-color needs no override here — it already follows
+     --inspect-danger-foreground, mapped to the IDE palette above. */
+  --inspect-tool-error-bg: var(--vscode-inputValidation-errorBackground);
   --inspect-find-background: var(--vscode-editorWidget-background);
   --inspect-find-foreground: var(--vscode-editorWidget-foreground);
   --inspect-input-background: var(--vscode-input-background);
@@ -303,7 +306,4 @@ body[class^="vscode-"] .modal {
   --inspect-tool-description-color: var(--inspect-muted-foreground);
   --inspect-tool-error-color: var(--inspect-danger-foreground);
   --inspect-tool-error-bg: rgba(var(--inspect-danger-rgb), 0.06);
-}
-
-:root[data-theme="dark"] {
 }

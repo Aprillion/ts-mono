@@ -197,8 +197,7 @@ a {
   color: var(--inspect-link);
   text-decoration: underline;
 }
-a:hover {
-}
+/* a:hover color is owned by base.css (--inspect-link-hover). */
 
 a:not([href]):not([class]),
 a:not([href]):not([class]):hover {

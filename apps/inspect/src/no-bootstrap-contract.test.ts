@@ -11,6 +11,8 @@ import { describe, expect, it } from "vitest";
  */
 
 const REPO_ROOT = resolve(__dirname, "../../..");
+// Source only: design/ and docs/ (and *.md generally) may mention --bs- when
+// discussing the migration itself; "lib" matches the vite library outDir.
 const SCANNED_ROOTS = ["apps", "packages", "tooling"];
 const SCANNED_EXTENSIONS = [".ts", ".tsx", ".css", ".html"];
 const SKIPPED_DIRS = new Set(["node_modules", "dist", "lib", "coverage"]);
