@@ -7,10 +7,10 @@
 }
 
 .standalone {
-  border-top: 1px solid var(--bs-light-border-subtle);
-  border-right: 1px solid var(--bs-light-border-subtle);
-  border-bottom: 1px solid var(--bs-light-border-subtle);
-  border-radius: var(--bs-border-radius);
+  border-top: 1px solid var(--inspect-light-border-subtle);
+  border-right: 1px solid var(--inspect-light-border-subtle);
+  border-bottom: 1px solid var(--inspect-light-border-subtle);
+  border-radius: var(--inspect-radius);
   overflow: hidden;
 }
 
@@ -30,7 +30,7 @@
 
 .title {
   flex: none;
-  font-family: var(--bs-font-monospace);
+  font-family: var(--inspect-font-mono);
   font-size: var(--inspect-font-size-smaller);
   font-weight: 600;
   color: var(--inspect-readable-tool-call-border);
@@ -42,9 +42,9 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: var(--bs-font-monospace);
+  font-family: var(--inspect-font-mono);
   font-size: var(--inspect-font-size-smaller);
-  color: var(--bs-secondary-color);
+  color: var(--inspect-muted-foreground);
 }
 
 .pill {
@@ -54,22 +54,22 @@
   font-size: var(--inspect-font-size-smallestest);
   font-weight: 500;
   line-height: 1.5;
-  color: var(--bs-secondary-color);
-  background-color: var(--bs-body-bg);
-  border: 1px solid var(--bs-light-border-subtle);
+  color: var(--inspect-muted-foreground);
+  background-color: var(--inspect-background);
+  border: 1px solid var(--inspect-light-border-subtle);
   border-radius: 999px;
   padding: 1px 7px;
 }
 
 .inputZone {
-  border-top: 1px solid var(--bs-light-border-subtle);
+  border-top: 1px solid var(--inspect-light-border-subtle);
   background-color: var(--inspect-readable-tool-call-bg);
   padding: 0.5rem;
   overflow-x: auto;
 }
 
 .outputWell {
-  border-top: 1px solid var(--bs-light-border-subtle);
+  border-top: 1px solid var(--inspect-light-border-subtle);
   background-color: var(--inspect-tool-output-bg);
   padding: 12px 15px;
   font-size: var(--inspect-font-size-smaller);
