@@ -25,6 +25,7 @@ import "@tsmono/theme/transcript";
 import "@tsmono/theme/vscode";
 import "./app/App.css";
 
+import { TranscriptDisplayContext } from "@tsmono/inspect-components/transcript";
 import {
   AppErrorBoundary,
   ComponentIconProvider,
@@ -62,6 +63,13 @@ export const AppModeContext = createContext<AppProps["mode"]>("scans");
 
 export interface AppProps {
   mode?: "scans" | "workbench";
+  /**
+   * Default for the "open message details in modal" transcript setting when the
+   * user hasn't explicitly chosen (their choice always wins). Defaults to false
+   * for standalone Scout; embedders that lean on very long transcripts can pass
+   * `true`.
+   */
+  defaultDetailsInModal?: boolean;
 }
 
 export const App: FC<AppProps> = (props) => {
@@ -96,19 +104,28 @@ const useThemePreferenceSync = () => {
   }, []);
 };
 
-const AppContent: FC<AppProps> = ({ mode = "scans" }) => {
+const AppContent: FC<AppProps> = ({
+  mode = "scans",
+  defaultDetailsInModal = false,
+}) => {
   const router = useAppRouter(mode);
+
+  // User override wins; otherwise fall back to the embedder-provided default.
+  const detailsInModalSetting = useUserSettings((s) => s.detailsInModal);
+  const detailsInModal = detailsInModalSetting ?? defaultDetailsInModal;
 
   return router ? (
     <AppErrorBoundary>
       <ComponentIconProvider icons={componentIcons}>
         <ComponentStateProvider hooks={scoutStateHooks}>
           <AppModeContext.Provider value={mode}>
-            <ExtendedFindProvider>
-              <FindTargetProvider>
-                <RouterProvider router={router} />
-              </FindTargetProvider>
-            </ExtendedFindProvider>
+            <TranscriptDisplayContext.Provider value={{ detailsInModal }}>
+              <ExtendedFindProvider>
+                <FindTargetProvider>
+                  <RouterProvider router={router} />
+                </FindTargetProvider>
+              </ExtendedFindProvider>
+            </TranscriptDisplayContext.Provider>
           </AppModeContext.Provider>
         </ComponentStateProvider>
       </ComponentIconProvider>

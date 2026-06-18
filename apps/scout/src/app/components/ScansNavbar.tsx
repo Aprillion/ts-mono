@@ -7,6 +7,7 @@ import { AppModeContext } from "../../App";
 import { ApplicationIcons } from "../../icons";
 import { scanRoute, scansRoute } from "../../router/url";
 import { useStore } from "../../state/store";
+import { DetailsInModalToggleControl } from "../../theme/DetailsInModalToggleControl";
 import { ThemeToggleControl } from "../../theme/ThemeToggleControl";
 import { useScanRoute } from "../hooks/useScanRoute";
 
@@ -84,6 +85,7 @@ export const ScansNavbar: FC<ScansNavbarProps> = ({
         showThemeToggle ? (
           <>
             {children}
+            <DetailsInModalToggleControl />
             <ThemeToggleControl />
           </>
         ) : (

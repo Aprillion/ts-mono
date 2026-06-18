@@ -113,6 +113,11 @@ export {
   useTimelineSelect,
 } from "./TimelineSelectContext";
 export type { TimelineSelectByIdFn } from "./TimelineSelectContext";
+export {
+  TranscriptDisplayContext,
+  useTranscriptDisplayOptions,
+} from "./TranscriptDisplayContext";
+export type { TranscriptDisplayOptions } from "./TranscriptDisplayContext";
 
 // Event view components
 export { AnchorEventView } from "./AnchorEventView";

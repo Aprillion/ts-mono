@@ -23,6 +23,7 @@ import ClipboardJS from "clipboard";
 import { FC, useCallback, useEffect, useLayoutEffect } from "react";
 import { RouterProvider } from "react-router-dom";
 
+import { TranscriptDisplayContext } from "@tsmono/inspect-components/transcript";
 import { defaultRetry } from "@tsmono/react";
 import {
   ComponentIconProvider,
@@ -69,6 +70,13 @@ const componentIcons: ComponentIcons = {
 
 export interface AppProps {
   api: ClientAPI;
+  /**
+   * Default for the "open message details in modal" transcript setting when the
+   * user hasn't explicitly chosen (their choice always wins). Defaults to false
+   * for standalone Inspect; embedders that lean on very long transcripts (e.g.
+   * hawk) can pass `true` so model-call detail tabs open in a modal by default.
+   */
+  defaultDetailsInModal?: boolean;
 }
 
 // Keep the applied theme in lockstep with the persisted preference. The inline
@@ -103,10 +111,16 @@ const useThemePreferenceSync = () => {
  * Renders the application content. Mounted below the providers in App so it
  * can read the api context.
  */
-const AppContent: FC = () => {
+const AppContent: FC<{ defaultDetailsInModal: boolean }> = ({
+  defaultDetailsInModal,
+}) => {
   useThemePreferenceSync();
 
   const api = useApi();
+
+  // User override wins; otherwise fall back to the embedder-provided default.
+  const detailsInModalSetting = useUserSettings((s) => s.detailsInModal);
+  const detailsInModal = detailsInModalSetting ?? defaultDetailsInModal;
 
   // Whether the app was rehydrated
   const rehydrated = useStore((state) => state.app.rehydrated);
@@ -282,13 +296,17 @@ const AppContent: FC = () => {
   return (
     <ComponentIconProvider icons={componentIcons}>
       <ComponentStateProvider hooks={inspectStateHooks}>
-        <RouterProvider router={AppRouter} />
+        <TranscriptDisplayContext.Provider value={{ detailsInModal }}>
+          <RouterProvider router={AppRouter} />
+        </TranscriptDisplayContext.Provider>
       </ComponentStateProvider>
     </ComponentIconProvider>
   );
 };
 
-const AppConfigGate: FC = () => {
+const AppConfigGate: FC<{ defaultDetailsInModal: boolean }> = ({
+  defaultDetailsInModal,
+}) => {
   const appConfig = useAppConfigAsync();
 
   if (appConfig.error) {
@@ -306,18 +324,18 @@ const AppConfigGate: FC = () => {
     );
   }
 
-  return <AppContent />;
+  return <AppContent defaultDetailsInModal={defaultDetailsInModal} />;
 };
 
 /**
  * Renders the Main Application. Owns the query client + api providers so the
  * exported <App> stays self-contained for external embedders.
  */
-export const App: FC<AppProps> = ({ api }) => {
+export const App: FC<AppProps> = ({ api, defaultDetailsInModal = false }) => {
   return (
     <QueryClientProvider client={queryClient}>
       <ApiProvider value={api}>
-        <AppConfigGate />
+        <AppConfigGate defaultDetailsInModal={defaultDetailsInModal} />
       </ApiProvider>
       <ReactQueryDevtools initialIsOpen={false} />
     </QueryClientProvider>

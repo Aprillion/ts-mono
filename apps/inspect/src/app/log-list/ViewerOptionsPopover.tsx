@@ -1,10 +1,12 @@
 import clsx from "clsx";
 import { FC, useState } from "react";
 
+import { useTranscriptDisplayOptions } from "@tsmono/inspect-components/transcript";
 import { Button, PopOver } from "@tsmono/react/components";
 
 import { DB_VERSION } from "../../client/database/schema";
 import { useStore } from "../../state/store";
+import { useUserSettings } from "../../state/userSettings";
 import { useAppConfig } from "../server/useAppConfig";
 
 import styles from "./ViewerOptionsPopover.module.css";
@@ -25,6 +27,9 @@ export const ViewerOptionsPopover: FC<ViewerOptionsPopoverProps> = ({
   const replicationService = useStore((state) => state.replicationService);
   const dbStats = useStore((state) => state.logs.dbStats);
   const appConfig = useAppConfig();
+
+  const { detailsInModal } = useTranscriptDisplayOptions();
+  const setDetailsInModal = useUserSettings((s) => s.setDetailsInModal);
 
   const logDir = useStore((state) => state.logs.logDir);
 
@@ -62,6 +67,34 @@ export const ViewerOptionsPopover: FC<ViewerOptionsPopoverProps> = ({
       offset={[-10, 5]}
     >
       <div className={clsx(styles.container, "text-size-smaller")}>
+        <div
+          className={clsx(
+            "text-style-label",
+            "text-style-secondary",
+            styles.fullWidth
+          )}
+        >
+          Display
+        </div>
+        <label
+          className={clsx(styles.fullWidth, styles.fullWidthPadded)}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.5em",
+            cursor: "pointer",
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={detailsInModal}
+            onChange={(e) => setDetailsInModal(e.target.checked)}
+          />
+          Open message details in a modal
+        </label>
+
+        <div className={clsx(styles.spacer)}></div>
+
         <div
           className={clsx(
             "text-style-label",

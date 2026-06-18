@@ -12,7 +12,7 @@ import { ChatView } from "@tsmono/inspect-components/chat";
 import { MetaDataGrid } from "@tsmono/inspect-components/content";
 import { ModelUsagePanel } from "@tsmono/inspect-components/usage";
 import { usePrismHighlight, useProperty } from "@tsmono/react/hooks";
-import { formatTime } from "@tsmono/util";
+import { formatBytes, formatTime } from "@tsmono/util";
 
 import { GeneratingIndicator } from "../indicators/GeneratingIndicator";
 import { isLivePlaceholderMessage } from "../indicators/livePlaceholder";
@@ -333,15 +333,29 @@ export const APIView: FC<APIViewProps> = ({ call, className }) => {
 
   return (
     <div className={clsx(className)}>
-      <EventSection title="Request" copyContent={requestCode}>
+      <EventSection
+        title={apiSectionTitle("Request", requestCode)}
+        copyContent={requestCode}
+      >
         <APICodeCell sourceCode={requestCode} />
       </EventSection>
-      <EventSection title="Response" copyContent={responseCode}>
+      <EventSection
+        title={apiSectionTitle("Response", responseCode)}
+        copyContent={responseCode}
+      >
         <APICodeCell sourceCode={responseCode} />
       </EventSection>
     </div>
   );
 };
+
+// Surface how big a request/response payload is up front — the ticket called
+// out that "it is not clear how long a call is" before you commit to scrolling.
+function apiSectionTitle(label: string, code: string): string {
+  if (!code) return label;
+  const lines = code.split("\n").length;
+  return `${label} · ${formatBytes(code.length)} · ${lines.toLocaleString()} lines`;
+}
 
 interface APICodeCellProps {
   id?: string;

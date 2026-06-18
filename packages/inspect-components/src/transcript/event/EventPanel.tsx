@@ -1,20 +1,23 @@
 import clsx from "clsx";
 import {
+  CSSProperties,
   FC,
   isValidElement,
   ReactElement,
   ReactNode,
   useCallback,
   useContext,
+  useMemo,
   useState,
 } from "react";
 
-import { CopyButton } from "@tsmono/react/components";
+import { CopyButton, Modal } from "@tsmono/react/components";
 import { useProperty } from "@tsmono/react/hooks";
 
 import { MessageLabel } from "../../chat/MessageLabel";
 import { EventLabelContext } from "../EventLabelContext";
 import { useStickyObserver } from "../hooks/useStickyObserver";
+import { useTranscriptDisplayOptions } from "../TranscriptDisplayContext";
 import type { EventPanelCallbacks } from "../types";
 
 import { EventNavs } from "./EventNavs";
@@ -101,7 +104,26 @@ export const EventPanel: FC<EventPanelProps> = ({
   const defaultPill = filteredArrChildren.findIndex(
     (node) => hasDataDefault(node) && node.props["data-default"]
   );
-  const defaultPillId = defaultPill !== -1 ? pillId(defaultPill) : pillId(0);
+  const defaultIndex = defaultPill !== -1 ? defaultPill : 0;
+  const defaultPillId = pillId(defaultIndex);
+
+  const navItems = useMemo(
+    () =>
+      filteredArrChildren.map((child, index) => {
+        const defaultTitle = `Tab ${index}`;
+        const title =
+          child && isValidElement<ChildProps>(child)
+            ? child.props["data-name"] || defaultTitle
+            : defaultTitle;
+        return {
+          id: `eventpanel-${eventNodeId}-${index}`,
+          title,
+          target: pillId(index),
+        };
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [eventNodeId, filteredArrChildren.length]
+  );
 
   const [selectedNav, setSelectedNav] = useProperty(
     eventNodeId,
@@ -109,6 +131,24 @@ export const EventPanel: FC<EventPanelProps> = ({
     {
       defaultValue: defaultPillId,
     }
+  );
+
+  // When `detailsInModal` is on, the detail tabs open in a modal overlay with
+  // their own scroll container instead of expanding inline — the inline card
+  // keeps showing only the default (Summary) tab. `selectedNav` doubles as the
+  // modal's active tab (so it's remembered per event); `modalOpen` is local
+  // because the overlay shouldn't survive the row being virtualized away.
+  const { detailsInModal } = useTranscriptDisplayOptions();
+  const hasTabs = filteredArrChildren.length > 1;
+  const useModal = detailsInModal && hasTabs;
+  const [modalOpen, setModalOpen] = useState(false);
+
+  const openTabInModal = useCallback(
+    (target: string) => {
+      setSelectedNav(target);
+      setModalOpen(true);
+    },
+    [setSelectedNav]
   );
 
   const stickyRef = useStickyObserver<HTMLDivElement>();
@@ -218,22 +258,21 @@ export const EventPanel: FC<EventPanelProps> = ({
         <div className={styles.navs}>
           {isCollapsible && collapsibleContent && collapsed ? (
             ""
-          ) : filteredArrChildren && filteredArrChildren.length > 1 ? (
+          ) : hasTabs ? (
             <EventNavs
-              navs={filteredArrChildren.map((child, index) => {
-                const defaultTitle = `Tab ${index}`;
-                const title =
-                  child && isValidElement<ChildProps>(child)
-                    ? child.props["data-name"] || defaultTitle
-                    : defaultTitle;
-                return {
-                  id: `eventpanel-${eventNodeId}-${index}`,
-                  title: title,
-                  target: pillId(index),
-                };
-              })}
-              selectedNav={selectedNav || ""}
-              setSelectedNav={setSelectedNav}
+              navs={navItems}
+              // In modal mode the pills are "open in modal" buttons rather than
+              // an inline tab selector, so don't show a stuck active pill while
+              // the modal is closed — it would mismatch the inline body, which
+              // always shows the default tab.
+              selectedNav={
+                useModal
+                  ? modalOpen
+                    ? selectedNav || ""
+                    : ""
+                  : selectedNav || ""
+              }
+              setSelectedNav={useModal ? openTabInModal : setSelectedNav}
             />
           ) : (
             ""
@@ -253,6 +292,10 @@ export const EventPanel: FC<EventPanelProps> = ({
   // Determine root styling: depth === 0 or muted flag
   const isRoot = depth === 0 || muted;
 
+  const modalIndex = navItems.findIndex((nav) => nav.target === selectedNav);
+  const modalChild =
+    filteredArrChildren[modalIndex] ?? filteredArrChildren[defaultIndex];
+
   const card = (
     <div
       id={`event-panel-${eventNodeId}`}
@@ -270,10 +313,14 @@ export const EventPanel: FC<EventPanelProps> = ({
       >
         {filteredArrChildren?.map((child, index) => {
           const id = pillId(index);
-          const isSelected = id === selectedNav;
+          // Only render one tab inline (ported from inspect for better perf).
+          // In modal mode the inline body is pinned to the default (Summary)
+          // tab; the rest live in the modal opened from the nav pills.
+          const isInline = useModal
+            ? index === defaultIndex
+            : id === selectedNav;
 
-          // Only render the selected tab (ported from inspect for better perf)
-          if (!isSelected) {
+          if (!isInline) {
             return null;
           }
 
@@ -281,7 +328,7 @@ export const EventPanel: FC<EventPanelProps> = ({
             <div
               key={`children-${id}-${index}`}
               id={id}
-              className={clsx("tab-pane", "show", isSelected ? "active" : "")}
+              className={clsx("tab-pane", "show", "active")}
             >
               {child}
             </div>
@@ -304,6 +351,32 @@ export const EventPanel: FC<EventPanelProps> = ({
           {childIds?.length === 1 ? "event" : "events"})
         </div>
       ) : undefined}
+
+      {useModal && (
+        <Modal
+          show={modalOpen}
+          onHide={() => setModalOpen(false)}
+          title={title || "Event details"}
+          id={`event-modal-${eventNodeId}`}
+          width="min(1100px, 92vw)"
+          overflow="auto"
+        >
+          {/* The modal body is the single scroll container, so unbound the
+              per-cell code height cap that keeps the inline view compact. */}
+          <div style={{ "--api-pre-max-height": "none" } as CSSProperties}>
+            <div className={styles.modalNavs}>
+              <EventNavs
+                navs={navItems}
+                selectedNav={selectedNav || ""}
+                setSelectedNav={setSelectedNav}
+              />
+            </div>
+            <div className={clsx("tab-pane", "show", "active")}>
+              {modalChild}
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
   return card;

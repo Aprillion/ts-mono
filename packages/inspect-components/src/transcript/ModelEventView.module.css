@@ -30,6 +30,18 @@
   border-radius: var(--inspect-radius);
 }
 
+/* On screen, cap each request/response block so a megabyte of JSON scrolls
+   within its own box instead of inflating the transcript row and shoving the
+   rest of the transcript out from under the reader. The modal detail view sets
+   `--api-pre-max-height: none` so its own body is the single scroll container,
+   and print is left uncapped so the full payload renders on paper. */
+@media screen {
+  .codePre {
+    max-height: var(--api-pre-max-height, 60vh);
+    overflow: auto;
+  }
+}
+
 .code {
   white-space: pre-wrap !important;
   word-wrap: anywhere !important;

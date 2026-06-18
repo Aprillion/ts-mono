@@ -113,6 +113,18 @@
   padding-right: 0.3em;
 }
 
+/* Tab nav pinned to the top of the modal's own scroll container so you can
+   switch detail tabs without scrolling back up through long content. */
+.modalNavs {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background-color: var(--inspect-background);
+  padding-bottom: 0.5em;
+  margin-bottom: 0.5em;
+  border-bottom: solid 1px var(--inspect-border-subtle);
+}
+
 @media print {
   .card {
     break-inside: avoid;

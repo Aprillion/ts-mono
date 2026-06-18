@@ -18,9 +18,13 @@ const MAX_SEARCH_MODEL_HISTORY = 25;
 interface UserSettingsState {
   dataframeColumnPresets: ColumnPreset[];
   themePreference: ThemePreference;
+  // undefined = follow the host app's default (see `App`'s defaultDetailsInModal);
+  // an explicit boolean is a user override that wins everywhere.
+  detailsInModal?: boolean;
   searchModelHistory: string[];
   setDataframeColumnPresets: (presets: ColumnPreset[]) => void;
   setThemePreference: (themePreference: ThemePreference) => void;
+  setDetailsInModal: (detailsInModal: boolean) => void;
   recordSearchModel: (model: string) => void;
   clearSearchModelHistory: () => void;
 }
@@ -37,6 +41,10 @@ export const useUserSettings = create<UserSettingsState>()(
       },
       setThemePreference: (themePreference: ThemePreference) => {
         set({ themePreference });
+      },
+      detailsInModal: undefined,
+      setDetailsInModal: (detailsInModal: boolean) => {
+        set({ detailsInModal });
       },
       recordSearchModel: (model: string) => {
         const trimmedModel = model.trim();

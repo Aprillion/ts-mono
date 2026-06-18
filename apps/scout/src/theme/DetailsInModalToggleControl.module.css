@@ -1,0 +1,18 @@
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  padding: 0.15em 0.35em;
+  color: var(--inspect-muted-foreground);
+  cursor: pointer;
+}
+
+.button:hover {
+  color: var(--inspect-foreground);
+}
+
+.active {
+  color: var(--inspect-link);
+}

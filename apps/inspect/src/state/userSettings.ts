@@ -20,6 +20,10 @@ interface UserSettingsState {
   setThemePreference: (themePreference: ThemePreference) => void;
   showRetriedLogs: boolean;
   setShowRetriedLogs: (showRetriedLogs: boolean) => void;
+  // undefined = follow the host app's default (see `App`'s defaultDetailsInModal);
+  // an explicit boolean is a user override that wins everywhere.
+  detailsInModal?: boolean;
+  setDetailsInModal: (detailsInModal: boolean) => void;
   searchModelHistory: string[];
   recordSearchModel: (model: string) => void;
   clearSearchModelHistory: () => void;
@@ -36,6 +40,10 @@ export const useUserSettings = create<UserSettingsState>()(
       showRetriedLogs: false,
       setShowRetriedLogs: (showRetriedLogs: boolean) => {
         set({ showRetriedLogs });
+      },
+      detailsInModal: undefined,
+      setDetailsInModal: (detailsInModal: boolean) => {
+        set({ detailsInModal });
       },
       searchModelHistory: [],
       recordSearchModel: (model: string) => {

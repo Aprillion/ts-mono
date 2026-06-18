@@ -5,6 +5,7 @@ import { useLocation } from "react-router-dom";
 import { useLoggingNavigate } from "../../debugging/navigationDebugging";
 import { ApplicationIcons } from "../../icons";
 import { getActivityByRoute } from "../../router/activities";
+import { DetailsInModalToggleControl } from "../../theme/DetailsInModalToggleControl";
 import { ThemeToggleControl } from "../../theme/ThemeToggleControl";
 import { AppConfig } from "../../types/api-types";
 import { appAliasedPath } from "../server/useAppConfig";
@@ -60,6 +61,7 @@ export const ProjectBar: FC<ProjectBarProps> = ({ config }) => {
           {appAliasedPath(config, config.project_dir)}
         </span>
         <div className={styles.right}>
+          <DetailsInModalToggleControl />
           <ThemeToggleControl />
         </div>
       </div>
