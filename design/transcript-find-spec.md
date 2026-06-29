@@ -169,6 +169,24 @@ item that is NOT JSON). Excluded for now (no descriptor emitted): JSON-rendered
 content, images, reasoning (collapsed + special-cased), tool-result structured
 views. Widen kind-by-kind later; the invariant holds for whatever is enumerated.
 
+## Renderer annotation (the integration contract)
+
+The renderer must put `data-search-event-id` / `data-search-field-key` /
+`data-search-field-index` on the exact element whose `textContent` equals a
+manifest field's `text` — the `RenderedText` body for a markdown field, the
+model-name text node for the plain `model` field. Identity must match the
+manifest: walk the event in the SAME order `eventSearchFields` uses (model name,
+then input messages, then outputs), maintaining a per-`fieldKey` occurrence
+counter, so the k-th annotated body carries the same `(fieldKey, fieldIndex)` as
+the k-th descriptor. Nothing else is annotated (citations, JSON panels,
+reasoning, titles' label text, role headers, tabs → uncounted).
+
+**Contract test (DOM):** rendering an event must produce exactly the set of
+annotated elements that `buildSearchManifest([event], …)` yields — same
+`(eventId, fieldKey, fieldIndex)` identities, and each element's `textContent`
+equal to the corresponding field's `text`. This is the equality that, if it
+holds, makes counter==highlight hold; assert it across the in-scope field kinds.
+
 ## Module boundary
 
 Pure, DOM-free **match model** (subagent rebuilds this from spec + tests):
