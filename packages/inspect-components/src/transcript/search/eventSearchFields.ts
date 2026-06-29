@@ -6,6 +6,8 @@ import type {
 } from "@tsmono/inspect-common/types";
 import { isJson } from "@tsmono/util";
 
+import { summaryInputMessages } from "../summaryMessages";
+
 /**
  * The kind of a searchable field, which determines how the matcher derives the
  * field's canonical `text` from `rawText`:
@@ -63,9 +65,12 @@ function modelEventFields(event: ModelEvent): FieldDescriptor[] {
     push("model", "plain", event.model);
   }
 
-  // Render order mirrors ModelEventView's Summary tab: input messages
-  // (user/system) first, then the assistant output choices.
-  for (const message of event.input) {
+  // Render order mirrors ModelEventView's default Summary tab: the shown input
+  // messages (the filtered user/system subset, NOT the echoed history) first,
+  // then the assistant output choices. Iterating `summaryInputMessages` (the
+  // same helper the view uses) keeps the manifest == the annotated/selectable
+  // set — never count hidden-by-default history we can't select (fail-closed).
+  for (const message of summaryInputMessages(event)) {
     pushMessageBodies(message, message.role, push);
   }
   for (const choice of event.output?.choices ?? []) {

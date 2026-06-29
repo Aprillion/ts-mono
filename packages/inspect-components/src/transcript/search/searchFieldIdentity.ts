@@ -1,5 +1,7 @@
 import type { ChatMessage, ModelEvent } from "@tsmono/inspect-common/types";
 
+import { summaryInputMessages } from "../summaryMessages";
+
 import { eventSearchFields, type FieldDescriptor } from "./eventSearchFields";
 
 /**
@@ -68,11 +70,12 @@ function messageBodyCount(message: ChatMessage, asOutput: boolean): number {
  * and the DOM annotations cannot drift.
  *
  * The descriptor stream is, by `eventSearchFields`' construction: the optional
- * `model` field, then for each input message its in-scope markdown bodies, then
- * for each output-choice message its in-scope markdown bodies. We walk the same
- * messages in the same order and consume the exact number of descriptors each
- * message contributes (its in-scope body count) so position i in this walk is
- * descriptor i.
+ * `model` field, then for each shown input message (`summaryInputMessages`, the
+ * default Summary subset — NOT the full `event.input`) its in-scope markdown
+ * bodies, then for each output-choice message its in-scope markdown bodies. We
+ * walk the same messages in the same order and consume the exact number of
+ * descriptors each message contributes (its in-scope body count) so position i
+ * in this walk is descriptor i.
  */
 export function assignEventFieldIdentities(
   event: ModelEvent
@@ -104,7 +107,7 @@ export function assignEventFieldIdentities(
     result.byMessage.set(message, identities);
   };
 
-  for (const message of event.input) {
+  for (const message of summaryInputMessages(event)) {
     assignMessage(message, false);
   }
   for (const choice of event.output?.choices ?? []) {
