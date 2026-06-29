@@ -1,7 +1,4 @@
-import type { Event } from "@tsmono/inspect-common/types";
 import { prepareSearchTerm } from "@tsmono/util";
-
-import { extractEventFields } from "../eventText";
 
 /**
  * One searchable field of the shared transcript manifest. The matcher builds
@@ -17,34 +14,6 @@ export interface SearchField {
   /** 0-based index distinguishing repeated `fieldKey`s within one event. */
   fieldIndex: number;
   text: string;
-}
-
-/**
- * Build the shared field manifest: the ordered list of searchable `SearchField`s
- * the matcher counts from. Document order across `events`, rendered display order
- * within an event (via `extractEventFields`). An event contributes nothing unless
- * it has a uuid present in `eventToRow` (only revealable/addressable events are
- * counted). `fieldIndex` is the 0-based occurrence of each `fieldKey` within its
- * event, distinguishing repeated keys (e.g. multiple `user` inputs).
- */
-export function buildManifest(
-  events: Event[],
-  eventToRow: Map<string, string>
-): SearchField[] {
-  const manifest: SearchField[] = [];
-  for (const event of events) {
-    const eventId = event.uuid;
-    if (!eventId) continue;
-    const rowKey = eventToRow.get(eventId);
-    if (rowKey === undefined) continue;
-    const fieldIndexByKey = new Map<string, number>();
-    for (const [fieldKey, text] of extractEventFields(event)) {
-      const fieldIndex = fieldIndexByKey.get(fieldKey) ?? 0;
-      fieldIndexByKey.set(fieldKey, fieldIndex + 1);
-      manifest.push({ eventId, rowKey, fieldKey, fieldIndex, text });
-    }
-  }
-  return manifest;
 }
 
 /** Which prepared-term variant produced an occurrence. */

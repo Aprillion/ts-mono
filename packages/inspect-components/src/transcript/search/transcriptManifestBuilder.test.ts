@@ -64,6 +64,9 @@ describe("buildSearchManifest", () => {
       model("e2", { outputs: ["second"] }),
     ];
     const manifest = await buildSearchManifest(events, new Map([["e2", "main"]]));
-    expect(manifest.map((f) => f.eventId)).toEqual(["e2"]);
+    // e1 is not in the row map -> none of its fields appear; e2's fields do
+    // (a model event yields its model-name field plus its output field).
+    expect(manifest.length).toBeGreaterThan(0);
+    expect(manifest.every((f) => f.eventId === "e2")).toBe(true);
   });
 });
