@@ -53,6 +53,18 @@ with the DOM adapter, which knows the reveal path per field identity.
   equals `text` exactly (so offsets map to a Range). This equality across
   markdown, syntax highlighting, expandable/tabbed panels, and Summary/Messages
   duplication is the riskiest contract — tests must assert it.
+- **Markdown fields** (message text, model output, reasoning, …) are NOT raw —
+  the UI renders them through markdown. So `text` for a markdown field is the
+  `textContent` produced by the SAME pipeline `MarkdownDiv` uses
+  (`renderMarkdown` → `sanitizeRenderedHtml` → post-process), run off-DOM via a
+  shared `canonicalMarkdownText(markdown, renderer)` helper that lives beside
+  the markdown renderer (NOT a hand-rolled stripper). Because that pipeline is
+  async and `MarkdownDiv` shows escaped-raw then swaps in final HTML, the
+  manifest text for markdown fields is computed async, and the adapter must
+  wait for the field's final render and verify `textContent === text` before
+  selecting. **Fail closed:** a field whose canonical text cannot be reproduced
+  and later verified (e.g. MathJax/SVG/async-only content) is NOT in the
+  manifest — never count a match you cannot then select exactly.
 - The renderer annotates the canonical element with its identity
   (`data-search-event-id`, `data-search-field-key`, `data-search-field-index` —
   separate attributes). DOM annotations are how the adapter *locates/validates*
@@ -77,6 +89,15 @@ chrome and is never a field.
 ## Coverage / revealability
 
 - Every counted match is reachable by stepping (1→N→1).
+- **Fail-closed field scope.** A field is in the manifest ONLY if its canonical
+  text can be reproduced off-DOM AND verified to equal the rendered element's
+  `textContent` at select time. Initially that is: plain-text fields (model
+  name, tool function, step name, error/traceback) verbatim, and plain markdown
+  body fields via `canonicalMarkdownText`. Fields whose rendered text the
+  renderer transforms in ways not yet reproduced off-DOM (citation injection,
+  JSON pretty-printing, reasoning special-casing, images) are EXCLUDED until
+  their canonicalization is added — never counted-but-unselectable. Coverage
+  grows field-kind by field-kind; the invariant holds for whatever is in scope.
 - A field is counted ONLY if the adapter can **reveal** it: scroll the
   virtualized row in, switch lane, switch tab, expand the panel / "show all
   messages" / compact tool call / nested child, then await layout. Content that
