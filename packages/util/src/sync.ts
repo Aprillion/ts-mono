@@ -71,7 +71,7 @@ export function debounce<T extends (...args: any[]) => unknown>(
   func: T,
   wait: number,
   options: { leading?: boolean; trailing?: boolean } = {}
-): (...args: Parameters<T>) => ReturnType<T> {
+): ((...args: Parameters<T>) => ReturnType<T>) & { cancel: () => void } {
   let timeout: ReturnType<typeof setTimeout> | null = null;
   let args: Parameters<T>;
   let result: ReturnType<T>;
@@ -114,6 +114,16 @@ export function debounce<T extends (...args: any[]) => unknown>(
     }
 
     return result;
+  };
+
+  // Drops a pending trailing invocation (e.g. when an explicit action should
+  // pre-empt the in-flight debounced one).
+  debounced.cancel = (): void => {
+    if (timeout) {
+      clearTimeout(timeout);
+      timeout = null;
+    }
+    args = null!;
   };
 
   return debounced;

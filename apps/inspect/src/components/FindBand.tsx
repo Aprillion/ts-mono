@@ -33,11 +33,23 @@ export const FindBand: FC = () => {
     offset: number;
     parentElement: Element;
   } | null>(null);
+  // The DOM range of the match found during typing. Refocusing the input after
+  // the search clears the document selection, so a later "reveal" can't just
+  // blur — it re-asserts this range to repaint the active highlight.
+  const lastFoundRange = useRef<Range | null>(null);
   const currentSearchTerm = useRef<string>("");
   const needsCursorRestoreRef = useRef<boolean>(false);
+  // Whether the current match has been "revealed" (input blurred so the native
+  // selection renders as the active, not greyed-out, highlight) since the term
+  // last changed. Lets the first Enter after typing reveal the already-found
+  // match instead of skipping past it to the next one.
+  const revealedRef = useRef<boolean>(false);
   const scrollTimeoutRef = useRef<number | null>(null);
   const focusTimeoutRef = useRef<number | null>(null);
   const searchIdRef = useRef(0);
+  const debouncedSearchRef = useRef<
+    ((() => void) & { cancel: () => void }) | null
+  >(null);
   const cachedCount = useRef<{ term: string; count: number }>({
     term: "",
     count: 0,
@@ -51,7 +63,12 @@ export const FindBand: FC = () => {
   const [noResults, setNoResults] = useState(false);
 
   const handleSearch = useCallback(
-    async (back = false) => {
+    async (back = false, reveal = false) => {
+      // Explicit navigation pre-empts any in-flight typing search so a trailing
+      // debounced run can't refocus the input and undo the reveal.
+      if (reveal) {
+        debouncedSearchRef.current?.cancel();
+      }
       const thisSearchId = ++searchIdRef.current;
 
       const searchTerm = searchBoxRef.current?.value ?? "";
@@ -60,12 +77,15 @@ export const FindBand: FC = () => {
         setCurrentMatchIndex(0);
         setNoResults(false);
         setFindTarget(null);
+        revealedRef.current = false;
+        lastFoundRange.current = null;
         return;
       }
 
       const termChanged = currentSearchTerm.current !== searchTerm;
       if (termChanged) {
         lastFoundItem.current = null;
+        lastFoundRange.current = null;
         currentSearchTerm.current = searchTerm;
         setCurrentMatchIndex(0);
       }
@@ -87,6 +107,15 @@ export const FindBand: FC = () => {
       setMatchCount(total > 0 ? total : null);
 
       const focusedElement = document.activeElement as HTMLElement;
+      // Capture the input's caret before the find: window.find moves the
+      // document selection, dropping the input's own selection, so a plain
+      // refocus afterwards lands the caret at 0. We restore it synchronously
+      // below (typing path) so the caret never visibly jumps while typing.
+      const inputEl = searchBoxRef.current;
+      const caretStart =
+        inputEl && focusedElement === inputEl ? inputEl.selectionStart : null;
+      const caretEnd =
+        inputEl && focusedElement === inputEl ? inputEl.selectionEnd : null;
 
       const selection = window.getSelection();
       let savedRange: Range | null = null;
@@ -135,6 +164,7 @@ export const FindBand: FC = () => {
             offset: range.startOffset,
             parentElement,
           };
+          lastFoundRange.current = range.cloneRange();
 
           // Publish the active term AFTER the find succeeds so consumers
           // (ExpandablePanel) auto-expand panels whose subtree contains the
@@ -166,7 +196,27 @@ export const FindBand: FC = () => {
         }
       }
 
-      focusedElement?.focus();
+      if (reveal && result) {
+        // Explicit navigation that found a match. Drop focus out of the input:
+        // a focused page input greys out the document's find selection, so the
+        // matched text only renders as the ACTIVE highlight once the input is
+        // blurred (this is the highlight bug on main, where Enter refocuses the
+        // input). window.find also resets the input caret, so arm restoreCursor
+        // for when the user resumes typing.
+        searchBoxRef.current?.blur();
+        needsCursorRestoreRef.current = true;
+        revealedRef.current = true;
+      } else {
+        // Typing path, or an explicit search with no match: keep focus in the
+        // input (so a no-result term can be corrected without refocusing) and
+        // restore the caret synchronously so it never jumps to 0 between
+        // keystrokes (the search-as-you-type caret bug).
+        focusedElement?.focus();
+        revealedRef.current = false;
+        if (inputEl && caretStart !== null && caretEnd !== null) {
+          inputEl.setSelectionRange(caretStart, caretEnd);
+        }
+      }
     },
     [setFindTarget, extendedFindTerm, countAllMatches]
   );
@@ -191,29 +241,74 @@ export const FindBand: FC = () => {
     };
   }, [setFindTarget]);
 
+  const revealCurrentMatch = useCallback(() => {
+    debouncedSearchRef.current?.cancel();
+    const range = lastFoundRange.current;
+    if (
+      !range ||
+      range.collapsed ||
+      !range.startContainer.isConnected ||
+      !range.endContainer.isConnected
+    ) {
+      // The typing-time match was detached/collapsed by a re-render (e.g. a
+      // panel auto-expanding around the term), so there's nothing to
+      // re-select — run a fresh reveal search instead.
+      void handleSearch(false, true);
+      return;
+    }
+    // Blur first so the input no longer owns focus, then re-assert the match
+    // range: refocusing the input after the typing search dropped the document
+    // selection, so a bare blur would reveal nothing. Re-adding it while the
+    // body is focused paints it as the active (not greyed) highlight.
+    searchBoxRef.current?.blur();
+    const selection = window.getSelection();
+    if (selection) {
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+    needsCursorRestoreRef.current = true;
+    revealedRef.current = true;
+  }, [handleSearch]);
+
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLInputElement>) => {
       if (e.key === "Escape") {
         storeHideFind();
       } else if (e.key === "Enter") {
-        void handleSearch(e.shiftKey);
+        e.preventDefault();
+        // First plain Enter after typing reveals the match found during typing
+        // (greyed-out while the input has focus) rather than skipping to the
+        // next; subsequent Enters step. Shift+Enter always steps backward. Only
+        // reveal when the box still holds the already-searched term — otherwise
+        // a fast edit-then-Enter would reveal the previous term's stale match,
+        // so fall through to a fresh search.
+        if (
+          !revealedRef.current &&
+          lastFoundItem.current &&
+          !e.shiftKey &&
+          searchBoxRef.current?.value === currentSearchTerm.current
+        ) {
+          revealCurrentMatch();
+        } else {
+          void handleSearch(e.shiftKey, true);
+        }
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "g") {
         e.preventDefault();
-        void handleSearch(e.shiftKey);
+        void handleSearch(e.shiftKey, true);
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f") {
         searchBoxRef.current?.focus();
         searchBoxRef.current?.select();
       }
     },
-    [storeHideFind, handleSearch]
+    [storeHideFind, handleSearch, revealCurrentMatch]
   );
 
   const findPrevious = useCallback(() => {
-    void handleSearch(true);
+    void handleSearch(true, true);
   }, [handleSearch]);
 
   const findNext = useCallback(() => {
-    void handleSearch(false);
+    void handleSearch(false, true);
   }, [handleSearch]);
 
   const restoreCursor = useCallback(() => {
@@ -228,14 +323,15 @@ export const FindBand: FC = () => {
 
   const runDebouncedSearch = useCallback(async () => {
     if (!searchBoxRef.current) return;
+    // handleSearch restores the caret synchronously on the typing path, so no
+    // deferred restore is armed here (it would force the caret to the end,
+    // breaking mid-text edits). The deferred restoreCursor is only for resuming
+    // typing after a reveal blurred the input.
     await handleSearch(false);
-    // Mark for cursor restore on next keypress (keeps find highlight visible)
-    needsCursorRestoreRef.current = true;
   }, [handleSearch]);
 
   // Created in an effect (not useMemo) because runDebouncedSearch reads refs,
   // and the compiler can't prove debounce() won't invoke it during render.
-  const debouncedSearchRef = useRef<(() => void) | null>(null);
   useEffect(() => {
     debouncedSearchRef.current = debounce(() => void runDebouncedSearch(), 100);
   }, [runDebouncedSearch]);
@@ -260,12 +356,12 @@ export const FindBand: FC = () => {
       // F3: Find next/previous
       if (e.key === "F3") {
         e.preventDefault();
-        void handleSearch(e.shiftKey);
+        void handleSearch(e.shiftKey, true);
         return;
       }
 
       // Ctrl/Cmd+F: Focus search box (block browser find)
-      if ((e.ctrlKey || e.metaKey) && e.key === "f") {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f") {
         e.preventDefault();
         e.stopPropagation();
         searchBoxRef.current?.focus();
@@ -273,11 +369,24 @@ export const FindBand: FC = () => {
         return;
       }
 
-      // Ctrl/Cmd+G: Find next/previous
-      if ((e.ctrlKey || e.metaKey) && e.key === "g") {
+      // Ctrl/Cmd+G: Find next/previous (Shift = previous; normalize case so the
+      // Shift+G that reports as uppercase "G" still matches after a reveal blur).
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "g") {
         e.preventDefault();
         e.stopPropagation();
-        void handleSearch(e.shiftKey);
+        void handleSearch(e.shiftKey, true);
+        return;
+      }
+
+      // Enter after a reveal: the input is blurred, so a follow-up Enter lands
+      // on document.body — keep stepping matches from that post-blur state, but
+      // never steal Enter from a focused button/link/input/contenteditable.
+      if (e.key === "Enter") {
+        const active = document.activeElement;
+        if (!active || active === document.body) {
+          e.preventDefault();
+          void handleSearch(e.shiftKey, true);
+        }
         return;
       }
 
