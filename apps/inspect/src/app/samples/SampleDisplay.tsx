@@ -631,10 +631,11 @@ export const SampleDisplay: FC<SampleDisplayProps> = ({
   // header expands while still sticky; when they reach the very top
   // the StickyScroll transitions to in-flow without re-rendering, so
   // the user never sees the header re-animate or "re-appear".
-  const { hidden: headroomHidden } = useScrollDirection(scrollRef, {
-    threshold: 80,
-    stayHiddenOnUpScroll: true,
-  });
+  const { hidden: headroomHidden, resetAnchor: headerResetAnchor } =
+    useScrollDirection(scrollRef, {
+      threshold: 80,
+      stayHiddenOnUpScroll: true,
+    });
   const [isHeaderSticky, setIsHeaderSticky] = useState(false);
   const handleHeaderStickyChange = useCallback((sticky: boolean) => {
     setIsHeaderSticky(sticky);
@@ -818,6 +819,7 @@ export const SampleDisplay: FC<SampleDisplayProps> = ({
                     id={`${baseId}-transcript-display-${id}`}
                     key={`${baseId}-transcript-display-${id}`}
                     scrollRef={scrollRef}
+                    onHeaderResetAnchor={headerResetAnchor}
                     offsetTop={stickyOffsetTop}
                     running={running}
                     events={sampleEvents}

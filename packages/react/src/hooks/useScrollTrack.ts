@@ -1,11 +1,13 @@
 import { RefObject, useCallback, useEffect, useRef } from "react";
 
 /**
- * Track which element is currently visible in a scroll container.
+ * Track which element is currently at the top of a scroll container.
  *
- * Calls `onElementVisible` when the topmost visible element changes.
- * Uses a detection point that slides toward the bottom of the viewport
- * as the user scrolls near the end, so every item can be selected.
+ * Calls `onElementVisible` when the element nearest the detection point (the
+ * top of the viewport, just below any sticky chrome) changes. At the very
+ * bottom of the scroll range the detection point drops to the viewport bottom,
+ * so the final elements — which can't be scrolled to the top — can still
+ * become current.
  */
 export function useScrollTrack(
   elementIds: string[],
@@ -29,31 +31,23 @@ export function useScrollTrack(
     const viewportBottom = containerRect
       ? containerRect.bottom
       : window.innerHeight;
-    const viewportHeight = viewportBottom - viewportTop;
 
-    // Calculate dynamic threshold based on scroll position
+    // The detection point sits at the top of the viewport (just below the
+    // sticky chrome): the "current" element is whatever sits at the top, which
+    // is exactly where a scroll-to-element lands its target. The one exception
+    // is the very bottom of the scroll range, where the final elements
+    // physically can't reach the top — there we detect against the bottom of
+    // the viewport so the last item can still become current.
+    //
+    // Detection stays binary (top, or bottom only at the end of the range)
+    // rather than sliding progressively downward near the bottom: a sliding
+    // point corrupts explicit navigation, landing a jump target at the top yet
+    // detecting an element one or two rows further down.
     let detectionPoint = viewportTop;
-
     if (container) {
-      const scrollHeight = container.scrollHeight;
-      const scrollTop = container.scrollTop;
-      const clientHeight = container.clientHeight;
-      const maxScroll = scrollHeight - clientHeight;
-
-      // Calculate how close we are to the bottom (0 = at top, 1 = at bottom)
-      const scrollProgress = maxScroll > 0 ? scrollTop / maxScroll : 0;
-
-      // Start sliding only in the last 20% of scroll
-      const slideThreshold = 0.8;
-      if (scrollProgress > slideThreshold) {
-        const slideProgress =
-          (scrollProgress - slideThreshold) / (1 - slideThreshold);
-        const easedProgress = Math.pow(slideProgress, 3);
-        detectionPoint = viewportTop + viewportHeight * 0.9 * easedProgress;
-      }
-
-      // When fully scrolled to bottom, use bottom of viewport
-      if (scrollProgress >= 0.99) {
+      const maxScroll = container.scrollHeight - container.clientHeight;
+      const atBottom = maxScroll > 0 && container.scrollTop / maxScroll >= 0.99;
+      if (atBottom) {
         detectionPoint = viewportBottom - 50;
       }
     }
