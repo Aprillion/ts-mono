@@ -109,4 +109,20 @@ describe("eventSearchFields", () => {
     expect(users.map((f) => f.rawText)).toEqual(["before", "after"]);
     expect(users.map((f) => f.fieldIndex)).toEqual([0, 1]);
   });
+
+  it("merges only adjacent runs around a tool_use break", () => {
+    // [text, text, tool_use, text] → the leading run merges to one body, the
+    // tool_use breaks it, the trailing text is a second body (2, not 3 — what a
+    // raw text-item count would wrongly give).
+    const fields = eventSearchFields(
+      modelWithContent("e1", [
+        text("alpha "),
+        text("beta"),
+        { type: "tool_use", id: "t", name: "f", arguments: {} },
+        text("gamma"),
+      ])
+    );
+    const users = fields.filter((f) => f.fieldKey === "user");
+    expect(users.map((f) => f.rawText)).toEqual(["alpha beta", "gamma"]);
+  });
 });

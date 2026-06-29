@@ -13,7 +13,6 @@ import {
   MarkdownDiv,
   type MarkdownReference,
 } from "@tsmono/react/components";
-import { isJson } from "@tsmono/util";
 
 import { useDisplayMode } from "../content/DisplayModeContext";
 import { RecordTree } from "../content/RecordTree";
@@ -21,6 +20,7 @@ import { useMessageSearchIdentities } from "../transcript/search/SearchFieldCont
 
 import styles from "./ChatMessage.module.css";
 import { MessageContent } from "./MessageContent";
+import { inScopeMarkdownBodies } from "./normalizeContent";
 import { defaultContext, MessageContents } from "./MessageContents";
 import { hasServerToolUse, Message } from "./messages";
 import { ServerToolCall } from "./server-tools/ServerToolCall";
@@ -323,15 +323,13 @@ export const ChatMessage: FC<ChatMessageProps> = memo(function ChatMessage({
   );
 });
 
-/** In-scope searchable markdown bodies in a segment, matching `markdownBodies`
- * in eventSearchFields (a `text` item whose text is not JSON-rendered). */
+/** How many in-scope searchable markdown bodies a segment renders, via the
+ * shared `inScopeMarkdownBodies` (the same enumerator the search manifest uses)
+ * so identity allocation here cannot drift from what gets annotated — in
+ * particular both collapse adjacent text items into one body. */
 const inScopeBodyCount = (
   contents: Exclude<Message["content"], string>
-): number =>
-  contents.filter(
-    (item) =>
-      typeof item !== "string" && item.type === "text" && !isJson(item.text)
-  ).length;
+): number => inScopeMarkdownBodies(contents).length;
 
 type TurnSegment =
   | { kind: "prose"; contents: Exclude<Message["content"], string> }

@@ -1,15 +1,10 @@
 import type {
   ChatMessage,
-  Content,
   Event,
   ModelEvent,
 } from "@tsmono/inspect-common/types";
-import { isJson } from "@tsmono/util";
 
-import {
-  normalizeContent,
-  type ContentObject,
-} from "../../chat/normalizeContent";
+import { inScopeMarkdownBodies } from "../../chat/normalizeContent";
 import { summaryInputMessages } from "../summaryMessages";
 
 /**
@@ -89,38 +84,7 @@ function pushMessageBodies(
   fieldKey: string,
   push: (fieldKey: string, kind: FieldKind, rawText: string) => void
 ): void {
-  for (const text of markdownBodies(message.content)) {
+  for (const text of inScopeMarkdownBodies(message.content)) {
     push(fieldKey, "markdown", text);
   }
-}
-
-/**
- * The markdown body texts of a message's content, in render order — one per
- * `text` body MessageContent renders through markdown. It first applies the
- * SAME `normalizeContent` the renderer uses (rendered mode): adjacent text items
- * collapse into one body with citation `<sup>` markers injected, so each body
- * here corresponds 1:1 to a `RenderedText` element (and `markdownBodies[k]`'s
- * text is exactly what `canonicalMarkdownText` must reproduce for the k-th
- * annotated body). JSON-detected text (rendered as a JSON panel) and non-text
- * content (images, reasoning, tool use, …) are omitted.
- *
- * Rendered mode is assumed: the searchable transcript renders content rendered,
- * and a raw/rendered toggle bumps the manifest generation (the manifest is
- * rebuilt), so this never serves a stale-mode body list.
- */
-function markdownBodies(content: string | Array<Content>): string[] {
-  const normalized = normalizeContent(content, "rendered");
-  const items = typeof normalized === "string" ? [normalized] : normalized;
-  const bodies: string[] = [];
-  for (const item of items) {
-    const text = typeof item === "string" ? item : itemText(item);
-    if (text !== undefined && !isJson(text)) {
-      bodies.push(text);
-    }
-  }
-  return bodies;
-}
-
-function itemText(item: ContentObject): string | undefined {
-  return item.type === "text" ? item.text : undefined;
 }

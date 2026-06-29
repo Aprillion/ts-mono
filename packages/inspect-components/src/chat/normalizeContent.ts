@@ -9,6 +9,7 @@ import type {
   ContentToolUse,
   ContentVideo,
 } from "@tsmono/inspect-common/types";
+import { isJson } from "@tsmono/util";
 
 import { type DisplayMode } from "../content/DisplayModeContext";
 
@@ -159,3 +160,33 @@ export const isCitationWithRange = (
 ): citation is DistributiveOmit<Citation, "cited_text"> & {
   cited_text: [number, number];
 } => Array.isArray(citation.cited_text);
+
+/**
+ * The in-scope searchable markdown body texts of a message's content, in render
+ * order — one per `text` body `MessageContent` renders through markdown, AFTER
+ * `normalizeContent` has merged adjacent text items (so a `[text, text]` run is
+ * ONE body with citation `<sup>`s injected, exactly the single `RenderedText`
+ * element the renderer emits). JSON-detected text (rendered as a JSON panel) and
+ * non-text content are excluded.
+ *
+ * The single source of truth for "which bodies are searchable", consumed by both
+ * the search manifest (`eventSearchFields`) and the renderer's per-message
+ * identity allocation (`ChatMessage`), so the counted, annotated, and rendered
+ * body sets cannot drift. Rendered mode is assumed (the searchable transcript
+ * renders content rendered).
+ */
+export const inScopeMarkdownBodies = (content: Contents): string[] => {
+  const normalized = normalizeContent(content, "rendered");
+  const items = typeof normalized === "string" ? [normalized] : normalized;
+  const bodies: string[] = [];
+  for (const item of items) {
+    const text =
+      typeof item === "string"
+        ? item
+        : item.type === "text"
+          ? item.text
+          : undefined;
+    if (text !== undefined && !isJson(text)) bodies.push(text);
+  }
+  return bodies;
+};
