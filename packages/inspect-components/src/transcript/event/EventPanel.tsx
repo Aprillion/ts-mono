@@ -30,7 +30,10 @@ const kDefaultIcon = "bi bi-table";
 interface EventPanelProps {
   eventNodeId: string;
   className?: string;
-  title?: string;
+  /** Header title. A `ReactNode` (not just a string) so a content value inside
+   * it — e.g. the model name — can be wrapped in its own search-annotated
+   * element while the surrounding label/suffix stays plain chrome. */
+  title?: ReactNode;
   subTitle?: string;
   text?: string;
   icon?: string;

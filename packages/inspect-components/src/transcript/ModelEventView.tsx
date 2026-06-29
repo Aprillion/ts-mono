@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { FC, useMemo, useRef, useState } from "react";
+import { FC, ReactNode, useMemo, useRef, useState } from "react";
 
 import type {
   ChatMessage,
@@ -25,6 +25,14 @@ import { StopReasonBadge } from "./event/StopReasonBadge";
 import { formatTiming, formatTitle, isCancelError } from "./event/utils";
 import { TranscriptIcons } from "./icons";
 import styles from "./ModelEventView.module.css";
+import {
+  SearchFieldProvider,
+  type SearchFieldContextValue,
+} from "./search/SearchFieldContext";
+import {
+  assignEventFieldIdentities,
+  searchIdentityAttributes,
+} from "./search/searchFieldIdentity";
 import { retryAttemptKey } from "./timeline/retryGrouping";
 import { EventNode, EventNodeContext, EventPanelCallbacks } from "./types";
 
@@ -163,6 +171,36 @@ export const ModelEventView: FC<ModelEventViewProps> = ({
       ? `${panelTitle} · Cancelled${formatFailureTime(event)}`
       : formatTitle(panelTitle, totalUsage, callTime);
 
+  // Search-field identities for this event, taken from the shared enumerator.
+  // The chat views below stamp each message body's canonical element; here we
+  // wrap the model-name value of the title in its own annotated element (the
+  // surrounding "Model Call:" / token-time text stays plain chrome).
+  const fieldIdentities = useMemo(
+    () => assignEventFieldIdentities(event),
+    [event]
+  );
+  const searchFieldValue = useMemo<SearchFieldContextValue>(
+    () => ({
+      identitiesForMessage: (message) =>
+        fieldIdentities.byMessage.get(message),
+    }),
+    [fieldIdentities]
+  );
+
+  // `panelTitle` ends with the model name, so the prefix is everything before
+  // it and the suffix is whatever `titleString` appended after `panelTitle`.
+  const modelIdentity = fieldIdentities.model;
+  const titleNode: ReactNode =
+    modelIdentity && event.model && panelTitle.endsWith(event.model) ? (
+      <>
+        {panelTitle.slice(0, panelTitle.length - event.model.length)}
+        <span {...searchIdentityAttributes(modelIdentity)}>{event.model}</span>
+        {titleString.slice(panelTitle.length)}
+      </>
+    ) : (
+      titleString
+    );
+
   const fallback = event.output?.fallback;
   const fallbackBadge = fallback ? (
     <span className={styles.fallbackBadge}>
@@ -180,10 +218,11 @@ export const ModelEventView: FC<ModelEventViewProps> = ({
   ) : undefined;
 
   return (
+    <SearchFieldProvider value={searchFieldValue}>
     <EventPanel
       eventNodeId={eventNode.id}
       className={className}
-      title={titleString}
+      title={titleNode}
       subTitle={
         event.timestamp
           ? formatTiming(event.timestamp, event.working_start)
@@ -304,6 +343,7 @@ export const ModelEventView: FC<ModelEventViewProps> = ({
         ""
       )}
     </EventPanel>
+    </SearchFieldProvider>
   );
 };
 

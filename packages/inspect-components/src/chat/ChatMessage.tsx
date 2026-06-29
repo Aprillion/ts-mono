@@ -13,9 +13,11 @@ import {
   MarkdownDiv,
   type MarkdownReference,
 } from "@tsmono/react/components";
+import { isJson } from "@tsmono/util";
 
 import { useDisplayMode } from "../content/DisplayModeContext";
 import { RecordTree } from "../content/RecordTree";
+import { useMessageSearchIdentities } from "../transcript/search/SearchFieldContext";
 
 import styles from "./ChatMessage.module.css";
 import { MessageContent } from "./MessageContent";
@@ -57,6 +59,7 @@ export const ChatMessage: FC<ChatMessageProps> = memo(function ChatMessage({
   const getMessageUrl = linking?.getMessageUrl;
   const linkIcon = linking?.icon ?? "bi bi-link-45deg";
   const displayMode = useDisplayMode();
+  const messageIdentities = useMessageSearchIdentities(message);
 
   const messageUrl = getMessageUrl?.(message.id || "");
 
@@ -177,6 +180,10 @@ export const ChatMessage: FC<ChatMessageProps> = memo(function ChatMessage({
   const segments = segmentTurnContent(message);
   if (segments) {
     const context = defaultContext();
+    // The message's body identities are spread across its prose segments in
+    // content order; dispense the right slice to each so annotation matches the
+    // shared enumerator.
+    let identityCursor = 0;
     return (
       <div
         data-message-id={message.id || undefined}
@@ -212,19 +219,30 @@ export const ChatMessage: FC<ChatMessageProps> = memo(function ChatMessage({
               className={styles.proseSegment}
             >
               {index === 0 ? roleHeader : null}
-              {segment.contents.length > 0 ? (
-                <ExpandablePanel
-                  id={`${id}-message-${index}`}
-                  collapse={collapse}
-                  lines={25}
-                >
-                  <MessageContent
-                    contents={segment.contents}
-                    context={context}
-                    references={references}
-                  />
-                </ExpandablePanel>
-              ) : null}
+              {segment.contents.length > 0
+                ? (() => {
+                    const bodyCount = inScopeBodyCount(segment.contents);
+                    const slice = messageIdentities?.slice(
+                      identityCursor,
+                      identityCursor + bodyCount
+                    );
+                    identityCursor += bodyCount;
+                    return (
+                      <ExpandablePanel
+                        id={`${id}-message-${index}`}
+                        collapse={collapse}
+                        lines={25}
+                      >
+                        <MessageContent
+                          contents={segment.contents}
+                          context={context}
+                          references={references}
+                          searchIdentities={slice}
+                        />
+                      </ExpandablePanel>
+                    );
+                  })()
+                : null}
             </div>
           );
         })}
@@ -304,6 +322,18 @@ export const ChatMessage: FC<ChatMessageProps> = memo(function ChatMessage({
     </div>
   );
 });
+
+/** In-scope searchable markdown bodies in a segment, matching `markdownBodies`
+ * in eventSearchFields (a `text` item whose text is not JSON-rendered). */
+const inScopeBodyCount = (
+  contents: Exclude<Message["content"], string>
+): number =>
+  contents.filter(
+    (item) =>
+      typeof item !== "string" &&
+      item.type === "text" &&
+      !isJson(item.text)
+  ).length;
 
 type TurnSegment =
   | { kind: "prose"; contents: Exclude<Message["content"], string> }

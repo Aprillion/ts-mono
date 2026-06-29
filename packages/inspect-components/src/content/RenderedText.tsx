@@ -20,6 +20,13 @@ interface RenderedTextProps {
   options?: {
     previewRefsOnHover?: boolean;
   };
+  /**
+   * Search-identity data attributes (`data-search-*`) for the find feature,
+   * stamped onto this body's single canonical element — the one whose
+   * `textContent` equals the manifest field's canonical text. See
+   * design/transcript-find-spec.md "Renderer annotation".
+   */
+  searchAttributes?: Record<string, string | number>;
 }
 
 export const RenderedText = forwardRef<
@@ -27,7 +34,16 @@ export const RenderedText = forwardRef<
   RenderedTextProps
 >(
   (
-    { markdown, references, style, className, forceRender, renderer, options },
+    {
+      markdown,
+      references,
+      style,
+      className,
+      forceRender,
+      renderer,
+      options,
+      searchAttributes,
+    },
     ref
   ) => {
     const displayMode = useDisplayMode();
@@ -43,6 +59,7 @@ export const RenderedText = forwardRef<
           style={style}
           className={className}
           renderer={renderer}
+          dataAttributes={searchAttributes}
         />
       ) : (
         <Preformatted
@@ -50,6 +67,7 @@ export const RenderedText = forwardRef<
           text={text}
           style={style}
           className={className}
+          dataAttributes={searchAttributes}
         />
       );
 

@@ -32,12 +32,18 @@ interface MarkdownDivWithReferencesProps {
   className?: string | string[];
   style?: React.CSSProperties;
   renderer?: MarkdownRenderer;
+  /** Extra `data-*` attributes forwarded to the canonical markdown root div. */
+  dataAttributes?: Record<string, string | number>;
 }
 
 export const MarkdownDivWithReferences = forwardRef<
   HTMLDivElement,
   MarkdownDivWithReferencesProps
->(({ markdown, references, options, className, style, renderer }, ref) => {
+>(
+  (
+    { markdown, references, options, className, style, renderer, dataAttributes },
+    ref
+  ) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [positionEl, setPositionEl] = useState<HTMLElement | null>(null);
   const [currentRef, setCurrentRef] = useState<MarkdownReference | null>(null);
@@ -92,6 +98,7 @@ export const MarkdownDivWithReferences = forwardRef<
         style={style}
         renderer={renderer}
         onClick={handleLinkClick}
+        dataAttributes={dataAttributes}
       />
     ),
     [
@@ -102,6 +109,7 @@ export const MarkdownDivWithReferences = forwardRef<
       style,
       renderer,
       handleLinkClick,
+      dataAttributes,
     ]
   );
 
@@ -223,7 +231,8 @@ export const MarkdownDivWithReferences = forwardRef<
       )}
     </div>
   );
-});
+  }
+);
 
 MarkdownDivWithReferences.displayName = "MarkdownDivWithReferences";
 

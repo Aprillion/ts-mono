@@ -32,6 +32,11 @@ import {
   videoMimeTypeForFormat,
 } from "../media/mediaSource";
 
+import {
+  searchIdentityAttributes,
+  type FieldIdentity,
+} from "../transcript/search/searchFieldIdentity";
+
 import { ContentDataView } from "./content-data/ContentDataView";
 import { ContentDocumentView } from "./documents/ContentDocumentView";
 import { JsonMessageContent } from "./JsonMessageContent";
@@ -61,6 +66,13 @@ interface MessageContentProps {
   contents: Contents;
   context: MessagesContext;
   references?: MarkdownReference[];
+  /**
+   * Search-field identities for this message's in-scope markdown bodies, in
+   * render order (one per body that renders through markdown). Each is stamped
+   * as `data-search-*` on that body's canonical element so the live DOM matches
+   * the manifest. Omitted outside the searchable transcript.
+   */
+  searchIdentities?: FieldIdentity[];
 }
 
 export const isMessageContent = (
@@ -82,9 +94,25 @@ export const MessageContent: FC<MessageContentProps> = ({
   contents,
   context,
   references,
+  searchIdentities,
 }) => {
   const displayMode = useDisplayMode();
   const normalized = normalizeContent(contents, displayMode);
+
+  // Dispense identities to in-scope markdown bodies in render order — exactly
+  // the bodies `eventSearchFields` (via `markdownBodies`) enumerates: a string,
+  // or a `text` item whose text is not JSON. The k-th such body gets the k-th
+  // identity, so the DOM annotation matches `buildSearchManifest`.
+  let bodyCursor = 0;
+  const nextSearchAttributes = (
+    text: string
+  ): Record<string, string | number> | undefined => {
+    if (isJson(text)) return undefined;
+    const identity = searchIdentities?.[bodyCursor];
+    bodyCursor++;
+    return identity ? searchIdentityAttributes(identity) : undefined;
+  };
+
   if (Array.isArray(normalized)) {
     return normalized.map((content, index) => {
       if (typeof content === "string") {
@@ -100,7 +128,8 @@ export const MessageContent: FC<MessageContentProps> = ({
           index === contents.length - 1,
           context,
           displayMode,
-          references
+          references,
+          nextSearchAttributes(content)
         );
       } else {
         if (content) {
@@ -112,7 +141,10 @@ export const MessageContent: FC<MessageContentProps> = ({
               index === contents.length - 1,
               context,
               displayMode,
-              references
+              references,
+              content.type === "text"
+                ? nextSearchAttributes((content as ContentText).text)
+                : undefined
             );
           } else {
             console.error(`Unknown message content type '${content.type}'`);
@@ -135,7 +167,8 @@ export const MessageContent: FC<MessageContentProps> = ({
       true,
       context,
       displayMode,
-      references
+      references,
+      nextSearchAttributes(normalized)
     );
   }
 };
@@ -147,13 +180,22 @@ interface MessageRenderer {
     isLast: boolean,
     context: MessagesContext,
     displayMode: DisplayMode,
-    references?: MarkdownReference[]
+    references?: MarkdownReference[],
+    searchAttributes?: Record<string, string | number>
   ) => ReactNode;
 }
 
 const messageRenderers: Record<string, MessageRenderer> = {
   text: {
-    render: (key, content, isLast, _context, displayMode, references) => {
+    render: (
+      key,
+      content,
+      isLast,
+      _context,
+      displayMode,
+      references,
+      searchAttributes
+    ) => {
       // The context provides a way to share context between different
       // rendering. In this case, we'll use it to keep track of citations
       const c = content as ContentText;
@@ -176,6 +218,7 @@ const messageRenderers: Record<string, MessageRenderer> = {
                 styles.breakable
               )}
               references={references}
+              searchAttributes={searchAttributes}
             />
             {c.citations && c.citations.length > 0 ? (
               <MessageCitations citations={c.citations} />

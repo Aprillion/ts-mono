@@ -9,6 +9,8 @@ import type {
 } from "@tsmono/inspect-common/types";
 import type { MarkdownReference } from "@tsmono/react/components";
 
+import { useMessageSearchIdentities } from "../transcript/search/SearchFieldContext";
+
 import { MessageContent } from "./MessageContent";
 
 interface MessageContentsProps {
@@ -35,6 +37,7 @@ export const MessageContents: FC<MessageContentsProps> = ({
   references,
 }) => {
   const context: MessagesContext = defaultContext();
+  const searchIdentities = useMessageSearchIdentities(message);
   return (
     <>
       {message.content && (
@@ -42,6 +45,7 @@ export const MessageContents: FC<MessageContentsProps> = ({
           contents={message.content}
           context={context}
           references={references}
+          searchIdentities={searchIdentities}
         />
       )}
     </>

@@ -28,6 +28,12 @@ interface MarkdownDivProps {
   className?: string | string[];
   postProcess?: (html: string) => string;
   onClick?: (event: React.MouseEvent<HTMLDivElement, MouseEvent>) => void;
+  /**
+   * Extra `data-*` attributes spread onto the rendered root div. This div's
+   * `textContent` is the canonical markdown text, so the find feature stamps
+   * its `data-search-*` identity here.
+   */
+  dataAttributes?: Record<string, string | number>;
 }
 
 const sanitizeMarkdown = (md: string): string => {
@@ -35,7 +41,10 @@ const sanitizeMarkdown = (md: string): string => {
 };
 
 const MarkdownDivComponent = forwardRef<HTMLDivElement, MarkdownDivProps>(
-  ({ markdown, renderer, style, className, postProcess, onClick }, ref) => {
+  (
+    { markdown, renderer, style, className, postProcess, onClick, dataAttributes },
+    ref
+  ) => {
     const rendererName = renderer ?? defaultMarkdownRenderer;
 
     // Check cache for sanitized rendered content (before post-processing)
@@ -129,6 +138,7 @@ const MarkdownDivComponent = forwardRef<HTMLDivElement, MarkdownDivProps>(
         style={style}
         className={clsx(className, "markdown-content")}
         onClick={onClick}
+        {...dataAttributes}
       />
     );
   }
