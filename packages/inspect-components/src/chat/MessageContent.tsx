@@ -31,7 +31,6 @@ import {
   isRenderableVideoSource,
   videoMimeTypeForFormat,
 } from "../media/mediaSource";
-
 import {
   searchIdentityAttributes,
   type FieldIdentity,
@@ -143,7 +142,7 @@ export const MessageContent: FC<MessageContentProps> = ({
               displayMode,
               references,
               content.type === "text"
-                ? nextSearchAttributes((content as ContentText).text)
+                ? nextSearchAttributes(content.text)
                 : undefined
             );
           } else {

@@ -16,12 +16,12 @@ import {
 import { ChatView } from "../../chat/ChatView";
 import { DisplayModeContext } from "../../content/DisplayModeContext";
 
-import { buildSearchManifest } from "./transcriptManifestBuilder";
 import { SearchFieldProvider } from "./SearchFieldContext";
 import {
   assignEventFieldIdentities,
   searchIdentityAttributes,
 } from "./searchFieldIdentity";
+import { buildSearchManifest } from "./transcriptManifestBuilder";
 
 // Renderer-annotation integration contract (design/transcript-find-spec.md
 // "Renderer annotation"): rendering a model event's content must produce

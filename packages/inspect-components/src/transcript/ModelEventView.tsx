@@ -181,8 +181,7 @@ export const ModelEventView: FC<ModelEventViewProps> = ({
   );
   const searchFieldValue = useMemo<SearchFieldContextValue>(
     () => ({
-      identitiesForMessage: (message) =>
-        fieldIdentities.byMessage.get(message),
+      identitiesForMessage: (message) => fieldIdentities.byMessage.get(message),
     }),
     [fieldIdentities]
   );
@@ -219,130 +218,130 @@ export const ModelEventView: FC<ModelEventViewProps> = ({
 
   return (
     <SearchFieldProvider value={searchFieldValue}>
-    <EventPanel
-      eventNodeId={eventNode.id}
-      className={className}
-      title={titleNode}
-      subTitle={
-        event.timestamp
-          ? formatTiming(event.timestamp, event.working_start)
-          : undefined
-      }
-      icon={TranscriptIcons.model}
-      headerExtra={
-        fallbackBadge || retryChip ? (
-          <>
-            {fallbackBadge}
-            {retryChip}
-          </>
-        ) : undefined
-      }
-      eventCallbacks={eventCallbacks}
-      collapsibleContent
-    >
-      <div data-name="Summary" className={styles.container}>
-        {context?.inlineExpansionUX &&
-          hasHiddenMessages &&
-          !showAllMessages && (
-            <div className={clsx("text-size-small", styles.showAllLink)}>
-              <a
-                href="#"
-                onClick={(e) => {
-                  e.preventDefault();
-                  setShowAllMessages(true);
-                }}
-              >
-                <i
-                  className={clsx(TranscriptIcons.expand, styles.showAllIcon)}
-                />
-                Show all messages
-              </a>
+      <EventPanel
+        eventNodeId={eventNode.id}
+        className={className}
+        title={titleNode}
+        subTitle={
+          event.timestamp
+            ? formatTiming(event.timestamp, event.working_start)
+            : undefined
+        }
+        icon={TranscriptIcons.model}
+        headerExtra={
+          fallbackBadge || retryChip ? (
+            <>
+              {fallbackBadge}
+              {retryChip}
+            </>
+          ) : undefined
+        }
+        eventCallbacks={eventCallbacks}
+        collapsibleContent
+      >
+        <div data-name="Summary" className={styles.container}>
+          {context?.inlineExpansionUX &&
+            hasHiddenMessages &&
+            !showAllMessages && (
+              <div className={clsx("text-size-small", styles.showAllLink)}>
+                <a
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setShowAllMessages(true);
+                  }}
+                >
+                  <i
+                    className={clsx(TranscriptIcons.expand, styles.showAllIcon)}
+                  />
+                  Show all messages
+                </a>
+              </div>
+            )}
+          <ChatView
+            id={`${eventNode.id}-model-output`}
+            messages={summaryMessages}
+            tools={{
+              callStyle: showToolCalls ? "complete" : "omit",
+              collapseToolMessages: context?.hasToolEvents !== false,
+            }}
+            labels={summaryLabels}
+          />
+          {isCancelled ? (
+            <div className={styles.cancelled}>
+              <i className={TranscriptIcons.cancel} />
+              <span>{event.error}</span>
             </div>
-          )}
-        <ChatView
-          id={`${eventNode.id}-model-output`}
-          messages={summaryMessages}
-          tools={{
-            callStyle: showToolCalls ? "complete" : "omit",
-            collapseToolMessages: context?.hasToolEvents !== false,
-          }}
-          labels={summaryLabels}
-        />
-        {isCancelled ? (
-          <div className={styles.cancelled}>
-            <i className={TranscriptIcons.cancel} />
-            <span>{event.error}</span>
-          </div>
-        ) : event.error ? (
-          <EventSection title="Error">
-            <div className={styles.error}>{event.error}</div>
-          </EventSection>
-        ) : event.pending ? (
-          <div className={clsx(styles.progress)}>
-            <GeneratingIndicator />
-          </div>
-        ) : undefined}
-      </div>
-      <div data-name="Info" className={styles.container}>
-        <div className={styles.all}>
-          {event.output.usage ? (
-            <ModelUsagePanel
-              usage={event.output.usage}
-              timing={{
-                timestamp: event.timestamp,
-                completed: event.completed,
-                working_time: event.working_time,
-              }}
-            />
-          ) : undefined}
-
-          {showStopReason && (
-            <StopReasonBadge
-              reason={firstChoice.stop_reason}
-              details={stopDetails}
-            />
-          )}
-
-          {Object.keys(entries).length > 0 && (
-            <EventSection
-              title="Configuration"
-              className={clsx(styles.tableSelection, styles.config)}
-            >
-              <MetaDataGrid entries={entries} options={{ plain: true }} />
+          ) : event.error ? (
+            <EventSection title="Error">
+              <div className={styles.error}>{event.error}</div>
             </EventSection>
-          )}
+          ) : event.pending ? (
+            <div className={clsx(styles.progress)}>
+              <GeneratingIndicator />
+            </div>
+          ) : undefined}
         </div>
-      </div>
+        <div data-name="Info" className={styles.container}>
+          <div className={styles.all}>
+            {event.output.usage ? (
+              <ModelUsagePanel
+                usage={event.output.usage}
+                timing={{
+                  timestamp: event.timestamp,
+                  completed: event.completed,
+                  working_time: event.working_time,
+                }}
+              />
+            ) : undefined}
 
-      <div data-name="Messages" className={styles.container}>
-        <ChatView
-          id={`${eventNode.id}-model-input-full`}
-          messages={[...event.input, ...(outputMessages || [])]}
-          tools={{
-            collapseToolMessages: context?.hasToolEvents !== false,
-          }}
-          labels={{
-            show: false,
-          }}
-        />
-      </div>
+            {showStopReason && (
+              <StopReasonBadge
+                reason={firstChoice.stop_reason}
+                details={stopDetails}
+              />
+            )}
 
-      {event.tools.length > 1 && (
-        <div data-name="Tools" className={styles.container}>
-          <ToolsConfig tools={event.tools} toolChoice={event.tool_choice} />
+            {Object.keys(entries).length > 0 && (
+              <EventSection
+                title="Configuration"
+                className={clsx(styles.tableSelection, styles.config)}
+              >
+                <MetaDataGrid entries={entries} options={{ plain: true }} />
+              </EventSection>
+            )}
+          </div>
         </div>
-      )}
 
-      {event.call ? (
-        <APIView
-          data-name="API"
-          call={event.call}
-          className={styles.container}
-        />
-      ) : (
-        ""
-      )}
-    </EventPanel>
+        <div data-name="Messages" className={styles.container}>
+          <ChatView
+            id={`${eventNode.id}-model-input-full`}
+            messages={[...event.input, ...(outputMessages || [])]}
+            tools={{
+              collapseToolMessages: context?.hasToolEvents !== false,
+            }}
+            labels={{
+              show: false,
+            }}
+          />
+        </div>
+
+        {event.tools.length > 1 && (
+          <div data-name="Tools" className={styles.container}>
+            <ToolsConfig tools={event.tools} toolChoice={event.tool_choice} />
+          </div>
+        )}
+
+        {event.call ? (
+          <APIView
+            data-name="API"
+            call={event.call}
+            className={styles.container}
+          />
+        ) : (
+          ""
+        )}
+      </EventPanel>
     </SearchFieldProvider>
   );
 };

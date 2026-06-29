@@ -330,9 +330,7 @@ const inScopeBodyCount = (
 ): number =>
   contents.filter(
     (item) =>
-      typeof item !== "string" &&
-      item.type === "text" &&
-      !isJson(item.text)
+      typeof item !== "string" && item.type === "text" && !isJson(item.text)
   ).length;
 
 type TurnSegment =
