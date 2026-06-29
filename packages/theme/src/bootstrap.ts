@@ -300,6 +300,9 @@ export const createApplyTheme = (options: ApplyThemeOptions): (() => void) => {
           "data-bs-theme",
           result.hostIsDark ? "dark" : "light"
         );
+        document.documentElement.style.colorScheme = result.hostIsDark
+          ? "dark"
+          : "light";
       }
     } else if (result.kind === "apply") {
       // data-* attributes belong on <html> (CSS gates `:root[data-bs-theme]`);
@@ -309,6 +312,14 @@ export const createApplyTheme = (options: ApplyThemeOptions): (() => void) => {
         "data-bs-theme",
         result.isDark ? "dark" : "light"
       );
+
+      // Paint the browser's default canvas (plus scrollbars / form controls) in
+      // the resolved scheme right now, before the app stylesheet loads. Without
+      // this the root stays the UA-default white until the dark background CSS
+      // arrives — a white flash on every dark-mode load.
+      document.documentElement.style.colorScheme = result.isDark
+        ? "dark"
+        : "light";
 
       // The readable skin is a small token-override block keyed on this
       // attribute (see base.css); absent attribute = the design-consistent
