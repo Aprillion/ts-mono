@@ -62,10 +62,6 @@ export const FindBand: FC = () => {
   const debouncedSearchRef = useRef<
     ((() => void) & { cancel: () => void }) | null
   >(null);
-  const cachedCount = useRef<{ term: string; count: number }>({
-    term: "",
-    count: 0,
-  });
   const [matchCount, setMatchCount] = useState<number | null>(null);
   const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
   // Tracks whether the most recent search returned no result, separate
@@ -109,13 +105,12 @@ export const FindBand: FC = () => {
       // bail on `total === 0`: try the find, and if it succeeds use the
       // index-1-of-unknown UI; if it doesn't, the post-search "no result"
       // branch handles it.
-      let total: number;
-      if (cachedCount.current.term === searchTerm) {
-        total = cachedCount.current.count;
-      } else {
-        total = countAllMatches(searchTerm);
-        cachedCount.current = { term: searchTerm, count: total };
-      }
+      //
+      // Counted per call, never cached by term: a selecting source returns 0
+      // until its async manifest resolves (the selecting-source branch recounts
+      // after it runs), and caching by term alone would serve a stale N after a
+      // sample/source/tab change for an unchanged term.
+      let total = countAllMatches(searchTerm);
       setMatchCount(total > 0 ? total : null);
 
       const focusedElement = document.activeElement as HTMLElement;
@@ -154,12 +149,17 @@ export const FindBand: FC = () => {
       // window.find path.
       let result: boolean;
       let sourceSelected = false;
-      if (total > 0 && hasSelectingSource()) {
+      if (hasSelectingSource()) {
         const seqBefore = matchIndexReportRef.current.seq;
         const handled = await extendedFindTerm(
           searchTerm,
           back ? "backward" : "forward"
         );
+        // The manifest has resolved by now; recount so the first search after a
+        // load (when the synchronous count above was still 0) shows the right N
+        // alongside the highlight the source just reported.
+        total = countAllMatches(searchTerm);
+        setMatchCount(total > 0 ? total : null);
         const report = matchIndexReportRef.current;
         sourceSelected =
           handled && report.seq > seqBefore && report.index !== null;

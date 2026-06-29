@@ -204,6 +204,47 @@ describe("renderer annotation contract", () => {
     expect(expected).toHaveLength(6);
   });
 
+  it("annotates one merged body for adjacent text items (manifest agrees)", async () => {
+    // normalizeContent collapses adjacent text items into a single RenderedText;
+    // the manifest must therefore emit ONE body for them, and that single
+    // annotated element's textContent must equal the merged canonical text.
+    const event = {
+      event: "model",
+      uuid: "e3",
+      model: "m",
+      input: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "alpha ", refusal: null, internal: null, citations: null },
+            { type: "text", text: "beta", refusal: null, internal: null, citations: null },
+          ],
+          id: null,
+        },
+      ],
+      output: { choices: [] },
+      tools: [],
+      timestamp: "2026-01-01T00:00:00Z",
+      working_start: 0,
+    } as unknown as ModelEvent;
+
+    const manifest = await buildSearchManifest([event], new Map([["e3", "main"]]));
+    expect(manifest.filter((f) => f.fieldKey === "user")).toHaveLength(1);
+    const expected: AnnotatedField[] = manifest
+      .map((f) => ({
+        eventId: f.eventId,
+        fieldKey: f.fieldKey,
+        fieldIndex: f.fieldIndex,
+        text: f.text,
+      }))
+      .sort(byIdentity);
+
+    const { container } = renderEventContent(event);
+    await waitFor(() => {
+      expect(annotatedFields(container)).toEqual(expected);
+    });
+  });
+
   it("does not annotate JSON-rendered text (out of scope, no descriptor)", async () => {
     const event = modelEvent("e2", {
       model: "m",

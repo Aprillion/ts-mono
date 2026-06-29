@@ -65,4 +65,48 @@ describe("eventSearchFields", () => {
       rawText: "anthropic/claude",
     });
   });
+
+  // The renderer's normalizeContent collapses adjacent text items into ONE
+  // RenderedText element, so the manifest must emit ONE body for them (else it
+  // over-counts vs. the single annotated element) with the merged text.
+  const text = (t: string, citations: unknown = null) => ({
+    type: "text",
+    text: t,
+    refusal: null,
+    internal: null,
+    citations,
+  });
+  const modelWithContent = (uuid: string, content: unknown): ModelEvent =>
+    ({
+      event: "model",
+      uuid,
+      model: "m",
+      input: [{ role: "user", content, id: null }],
+      output: { choices: [] },
+      timestamp: "2026-01-01T00:00:00Z",
+      working_start: 0,
+    }) as unknown as ModelEvent;
+
+  it("merges adjacent text items into a single body (matching the rendered element)", () => {
+    const fields = eventSearchFields(
+      modelWithContent("e1", [text("alpha "), text("beta")])
+    );
+    const users = fields.filter((f) => f.fieldKey === "user");
+    expect(users).toEqual([
+      { fieldKey: "user", fieldIndex: 0, kind: "markdown", rawText: "alpha beta" },
+    ]);
+  });
+
+  it("does not merge text items separated by non-text content", () => {
+    const fields = eventSearchFields(
+      modelWithContent("e1", [
+        text("before"),
+        { type: "image", image: "data:image/png;base64,xx" },
+        text("after"),
+      ])
+    );
+    const users = fields.filter((f) => f.fieldKey === "user");
+    expect(users.map((f) => f.rawText)).toEqual(["before", "after"]);
+    expect(users.map((f) => f.fieldIndex)).toEqual([0, 1]);
+  });
 });

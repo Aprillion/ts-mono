@@ -1,6 +1,8 @@
 import type { Event } from "@tsmono/inspect-common/types";
 import { canonicalMarkdownText } from "@tsmono/react/components";
 
+import { cappedText } from "../../content/cappedText";
+
 import { eventSearchFields } from "./eventSearchFields";
 import type { SearchField } from "./transcriptMatches";
 
@@ -27,9 +29,14 @@ export async function buildSearchManifest(
     const rowKey = eventToRow.get(eventId);
     if (rowKey === undefined) continue;
     for (const descriptor of eventSearchFields(event)) {
+      // `RenderedText` caps very large markdown via `cappedText` BEFORE the
+      // markdown pipeline, so the canonical text must canonicalize the same
+      // capped slice — otherwise a match past the cap would be counted but
+      // could never be selected (the renderer never emits that text). Plain
+      // fields in scope (the model name) are short and uncapped.
       const text =
         descriptor.kind === "markdown"
-          ? await canonicalMarkdownText(descriptor.rawText)
+          ? await canonicalMarkdownText(cappedText(descriptor.rawText).text)
           : descriptor.rawText;
       manifest.push({
         eventId,

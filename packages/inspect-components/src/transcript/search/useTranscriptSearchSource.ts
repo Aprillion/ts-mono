@@ -166,9 +166,15 @@ export function useTranscriptSearchSource(
   }, [selected]);
 
   // Index (into the current generation's match list) of the last match we
-  // resolved and selected, with the term it was for. Drives wrap-around
-  // stepping when the term is unchanged.
-  const lastResolvedRef = useRef<{ index: number; term: string } | null>(null);
+  // resolved and selected, with the term AND generation it was for. Drives
+  // wrap-around stepping when the term is unchanged — but only within the same
+  // generation: after a sample/events change the old index is meaningless, so
+  // stepping must restart at match 1 even if the term is identical.
+  const lastResolvedRef = useRef<{
+    index: number;
+    term: string;
+    generation: number;
+  } | null>(null);
   // searchId: supersedes a prior in-flight searchFn so a stale async reveal
   // can't move the selection/counter. Combined with the generation check below
   // this realizes the (sampleId, manifest-generation, searchId) staleness key.
@@ -202,6 +208,8 @@ export function useTranscriptSearchSource(
       await ensureManifest();
       if (isStale()) return false;
 
+      const manifest = manifestRef.current?.manifest ?? [];
+      const fieldText = buildFieldTextMap(manifest);
       const matches = getMatches(term);
       if (matches.length === 0) return false;
 
@@ -213,9 +221,13 @@ export function useTranscriptSearchSource(
       onHeadroomSetHidden?.(direction === "forward");
 
       // Starting position: continue from the last resolved match when the term
-      // is unchanged; otherwise start before the first (so forward → 0).
+      // is unchanged AND it was for this generation; otherwise start before the
+      // first (so forward → 0).
       const last = lastResolvedRef.current;
-      let position = last && last.term === term ? last.index : -1;
+      let position =
+        last && last.term === term && last.generation === myGeneration
+          ? last.index
+          : -1;
 
       // Iterate forward/backward until a match's field actually reveals and the
       // resulting selection validates. Events deeply nested under collapsed
@@ -247,9 +259,17 @@ export function useTranscriptSearchSource(
         const inDom = await waitForEventInDOM(next.eventId);
         if (isStale()) return false;
 
-        const ordinal = inDom ? selectMatch(matches, targetIndex) : null;
+        const expected = expectedSelectionText(fieldText, next);
+        const ordinal = inDom
+          ? await settleAndSelect(matches, targetIndex, expected)
+          : null;
+        if (isStale()) return false;
         if (ordinal !== null) {
-          lastResolvedRef.current = { index: ordinal, term };
+          lastResolvedRef.current = {
+            index: ordinal,
+            term,
+            generation: myGeneration,
+          };
           reportMatchIndex(ordinal + 1);
           onContentReady();
 
@@ -260,7 +280,7 @@ export function useTranscriptSearchSource(
           const reselectIndex = ordinal;
           const timer = window.setTimeout(() => {
             if (isStale()) return;
-            reselectMatch(matches, reselectIndex);
+            reselectMatch(matches, reselectIndex, expected);
           }, 300);
           pendingTimersRef.current.add(timer);
           return true;
@@ -337,24 +357,62 @@ function lastIndexForEvent(
   return last;
 }
 
+const FIELD_TEXT_SEP = " ";
+
+function fieldTextKey(field: {
+  eventId: string;
+  fieldKey: string;
+  fieldIndex: number;
+}): string {
+  return `${field.eventId}${FIELD_TEXT_SEP}${field.fieldKey}${FIELD_TEXT_SEP}${field.fieldIndex}`;
+}
+
+/** Identity → canonical text, so a match can recover the exact substring its
+ *  selection must equal once the field's markdown has settled. */
+function buildFieldTextMap(manifest: SearchField[]): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const field of manifest) map.set(fieldTextKey(field), field.text);
+  return map;
+}
+
+/** The exact (cased) substring a match's selection must equal: the canonical
+ *  field text sliced at the match's offsets. `undefined` if the field is absent
+ *  from the manifest (treated as "no settle check"). */
+function expectedSelectionText(
+  fieldText: Map<string, string>,
+  match: Match
+): string | undefined {
+  return fieldText.get(fieldTextKey(match))?.slice(match.start, match.end);
+}
+
 /**
- * Select the occurrence `matches[index]` refers to and VALIDATE it back to an
- * ordinal. Locates the annotated field element, maps the match's offsets to a
- * `Range`, sets the window selection, then reads the live selection back via
- * `fieldSelectionFromRange` → `matchIndexFromField`. Returns the validated
- * 0-based ordinal, or `null` if the field isn't mounted, the offsets don't map,
- * or the resulting selection doesn't validate (fail closed — the selection is
- * left untouched on the no-element / no-range path).
+ * Map the occurrence `matches[index]` to a `Range` in the (already located)
+ * field element and, if it is settled to its canonical text, set the window
+ * selection and VALIDATE it back to an ordinal.
+ *
+ * The settle guard (`range.toString() === expectedText`) is the render
+ * contract at select time: `MarkdownDiv` first paints escaped-raw markdown then
+ * swaps the final HTML asynchronously, so a freshly mounted `**foo**` field
+ * would otherwise let offsets [0,3] select `"**f"` and still validate by
+ * offset. Comparing the live selection's text to the canonical slice rejects
+ * that until the swap lands. Returns the validated 0-based ordinal, or `null`
+ * (selection left untouched) when not settled / the offsets don't map / the
+ * resulting selection doesn't validate (fail closed).
  */
-function selectMatch(matches: Match[], index: number): number | null {
-  if (typeof document === "undefined" || typeof window === "undefined") {
-    return null;
-  }
+function trySelect(
+  fieldEl: Element,
+  matches: Match[],
+  index: number,
+  expectedText: string | undefined
+): number | null {
+  if (typeof window === "undefined") return null;
   const match = matches[index]!;
-  const fieldEl = findFieldElement(document, match);
-  if (!fieldEl) return null;
   const range = rangeForOffsets(fieldEl, match.start, match.end);
   if (!range) return null;
+  // Not yet settled to the canonical text — don't disturb the selection.
+  if (expectedText !== undefined && range.toString() !== expectedText) {
+    return null;
+  }
 
   const sel = window.getSelection();
   if (!sel) return null;
@@ -368,12 +426,51 @@ function selectMatch(matches: Match[], index: number): number | null {
   return matchIndexFromField(matches, fieldSel);
 }
 
+function selectMatch(
+  matches: Match[],
+  index: number,
+  expectedText: string | undefined
+): number | null {
+  if (typeof document === "undefined") return null;
+  const fieldEl = findFieldElement(document, matches[index]!);
+  if (!fieldEl) return null;
+  return trySelect(fieldEl, matches, index, expectedText);
+}
+
+/**
+ * Select a revealed match once its field's markdown has settled to the
+ * canonical text. Polls the located element across frames: returns the
+ * validated ordinal as soon as the selection's text matches, `null` if the
+ * field never mounts (unreachable — caller skips) or never settles within the
+ * budget (fail closed).
+ */
+async function settleAndSelect(
+  matches: Match[],
+  index: number,
+  expectedText: string | undefined
+): Promise<number | null> {
+  if (typeof document === "undefined") return null;
+  const SETTLE = 24;
+  for (let i = 0; i < SETTLE; i++) {
+    const fieldEl = findFieldElement(document, matches[index]!);
+    if (!fieldEl) return null;
+    const ordinal = trySelect(fieldEl, matches, index, expectedText);
+    if (ordinal !== null) return ordinal;
+    await raf();
+  }
+  return null;
+}
+
 /**
  * If a late settling pass (Virtuoso re-render, lazy syntax highlighting,
  * ExpandablePanel reflow) detached the selected text node, re-select the SAME
  * match. No-op when the existing highlight still validates to this ordinal.
  */
-function reselectMatch(matches: Match[], index: number): void {
+function reselectMatch(
+  matches: Match[],
+  index: number,
+  expectedText: string | undefined
+): void {
   if (typeof window === "undefined") return;
   const sel = window.getSelection();
   if (!sel) return;
@@ -383,7 +480,7 @@ function reselectMatch(matches: Match[], index: number): void {
       return; // existing highlight is intact — don't disturb
     }
   }
-  selectMatch(matches, index);
+  selectMatch(matches, index, expectedText);
 }
 
 function raf(): Promise<void> {
