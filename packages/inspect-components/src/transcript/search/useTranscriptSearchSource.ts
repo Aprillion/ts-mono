@@ -12,10 +12,18 @@ import type { SwimlaneRow } from "../timeline/swimlaneRows";
 import type { TranscriptViewNodesHandle } from "../TranscriptViewNodes";
 
 import {
-  buildEventToRowMap,
-  findAllMatches,
-  SampleMatch,
-} from "./sampleSearch";
+  findFieldElement,
+  rangeForOffsets,
+  fieldSelectionFromRange,
+} from "./searchDomAdapter";
+import { buildEventToRowMap } from "./sampleSearch";
+import { buildSearchManifest } from "./transcriptManifestBuilder";
+import {
+  buildMatchList,
+  matchIndexFromField,
+  type Match,
+  type SearchField,
+} from "./transcriptMatches";
 
 const DEFAULT_ID = "transcript-sample";
 const SETTLE_LIMIT = 90;
@@ -43,12 +51,23 @@ export interface UseTranscriptSearchSourceOptions {
 }
 
 /**
- * Registers a sample-wide search source with ExtendedFindContext.
+ * Registers the transcript as a *selecting* search source (see
+ * design/transcript-find-spec.md). The transcript owns a canonical, ordered
+ * match list, selects the exact occurrence, and reports a *validated* ordinal
+ * so the counter equals the highlight (the hard invariant).
  *
- * - count(term): findAllMatches over the full sample. Cached per term.
- * - searchFn(term, dir): finds the next match across the entire sample,
- *   switches swimlane row if needed, sets the find target (auto-expand),
- *   then delegates to viewNodesRef.scrollToEvent.
+ * - The shared field manifest (`buildSearchManifest`) is the single source of
+ *   counted text; `buildMatchList(manifest, term)` is the ordered match list.
+ *   Count = matches.length, cached per (manifest-generation, term).
+ * - Step/next/prev advances an index over the matches (wrapping). For the
+ *   target match it reuses the existing reveal plumbing (row switch, find
+ *   target / auto-expand, scroll), then locates the annotated field element,
+ *   maps the match's offsets to a `Range`, sets the selection, and VALIDATES
+ *   the live selection back to an ordinal via `matchIndexFromField`. Only a
+ *   validated ordinal is reported — fail closed, never advance the counter to a
+ *   match it could not select.
+ * - Navigation is tagged with (sampleId, manifest-generation, searchId) so a
+ *   stale async reveal/select cannot move the selection or counter.
  *
  * Preconditions: must be mounted inside an `ExtendedFindProvider`. The
  * `FindTargetProvider` is optional — its setter no-ops when absent.
@@ -76,43 +95,86 @@ export function useTranscriptSearchSource(
 
   const eventToRow = useMemo(() => buildEventToRowMap(rows), [rows]);
 
-  const cacheRef = useRef<{
-    events: Event[];
-    eventToRow: Map<string, string>;
-    term: string;
-    matches: SampleMatch[];
+  // manifest-generation: the manifest (its fields + their offsets) can change
+  // only when the sample's events or the row map change. Bumping a generation
+  // invalidates the cached manifest, every cached match list, and any in-flight
+  // reveal tagged with the old generation (staleness, per spec). The async
+  // build for a generation is started eagerly so the count is ready by the time
+  // the user types.
+  const generationRef = useRef(0);
+  const manifestRef = useRef<{
+    generation: number;
+    promise: Promise<SearchField[]>;
+    manifest: SearchField[] | null;
   } | null>(null);
-  const getMatches = useCallback(
-    (term: string): SampleMatch[] => {
-      const c = cacheRef.current;
-      if (
-        c &&
-        c.events === events &&
-        c.eventToRow === eventToRow &&
-        c.term === term
-      ) {
-        return c.matches;
-      }
-      const matches = findAllMatches(events, term, eventToRow);
-      cacheRef.current = { events, eventToRow, term, matches };
-      return matches;
-    },
-    [events, eventToRow]
-  );
 
-  // Read across `await` boundaries to detect "user is already on this row"
-  // mid-search; needs to be a ref so a row-switch in flight sees the update.
+  const ensureManifest = useCallback((): Promise<SearchField[]> => {
+    const generation = generationRef.current;
+    const current = manifestRef.current;
+    if (current && current.generation === generation) return current.promise;
+    const promise = buildSearchManifest(events, eventToRow).then(
+      (manifest) => {
+        // Discard a resolution whose generation was superseded mid-build.
+        if (generationRef.current === generation && manifestRef.current) {
+          manifestRef.current.manifest = manifest;
+        }
+        return manifest;
+      }
+    );
+    manifestRef.current = { generation, promise, manifest: null };
+    return promise;
+  }, [events, eventToRow]);
+
+  // Bump the generation and kick off the build whenever the inputs change.
+  useEffect(() => {
+    generationRef.current += 1;
+    manifestRef.current = null;
+    void ensureManifest();
+  }, [ensureManifest]);
+
+  // Match-list cache, keyed by (generation, term). Only valid once the
+  // generation's manifest has resolved; until then `count` reads 0 (FindBand
+  // re-counts on the next keystroke, by which point the manifest is ready).
+  const matchCacheRef = useRef<{
+    generation: number;
+    term: string;
+    matches: Match[];
+  } | null>(null);
+  const getMatches = useCallback((term: string): Match[] => {
+    const generation = generationRef.current;
+    const manifest = manifestRef.current;
+    if (!manifest || manifest.generation !== generation || !manifest.manifest) {
+      return [];
+    }
+    const cached = matchCacheRef.current;
+    if (
+      cached &&
+      cached.generation === generation &&
+      cached.term === term
+    ) {
+      return cached.matches;
+    }
+    const matches = buildMatchList(manifest.manifest, term);
+    matchCacheRef.current = { generation, term, matches };
+    return matches;
+  }, []);
+
+  // Read `selected` across `await` boundaries to detect "already on this row".
   const selectedRef = useRef(selected);
   useEffect(() => {
     selectedRef.current = selected;
   }, [selected]);
 
-  const lastResolvedRef = useRef<{ match: SampleMatch; term: string } | null>(
-    null
-  );
-  const invocationIdRef = useRef(0);
-  // Self-correction timers scheduled at the end of searchFn. Tracked so
-  // unmount can clear them — otherwise they fire against detached DOM.
+  // Index (into the current generation's match list) of the last match we
+  // resolved and selected, with the term it was for. Drives wrap-around
+  // stepping when the term is unchanged.
+  const lastResolvedRef = useRef<{ index: number; term: string } | null>(null);
+  // searchId: supersedes a prior in-flight searchFn so a stale async reveal
+  // can't move the selection/counter. Combined with the generation check below
+  // this realizes the (sampleId, manifest-generation, searchId) staleness key.
+  const searchIdRef = useRef(0);
+  // Self-correction timers scheduled at the end of searchFn. Tracked so unmount
+  // can clear them — otherwise they fire against detached DOM.
   const pendingTimersRef = useRef<Set<number>>(new Set());
   useEffect(() => {
     const timers = pendingTimersRef.current;
@@ -122,60 +184,26 @@ export function useTranscriptSearchSource(
     };
   }, []);
 
-  // Active search term. Set by countFn on every keystroke so the listener
-  // below has it on the first selectionchange after a fresh search.
-  const activeTermRef = useRef<string>("");
-  // Keep `lastResolvedRef` in sync when window.find advances within a row
-  // without going through our searchFn. Otherwise the next cross-row
-  // navigation would pickNext from a stale position.
-  useEffect(() => {
-    if (typeof document === "undefined") return;
-    const onSelectionChange = () => {
-      const term = activeTermRef.current;
-      if (!term) return;
-      const sel = document.getSelection();
-      if (!sel || sel.rangeCount === 0) return;
-      const range = sel.getRangeAt(0);
-      // Cheap pre-filter: a real find result is a single text node selection
-      // exactly the length of the term. Skip the expensive `range.toString()`
-      // serialization for everything else (Ctrl-A on a long transcript can
-      // make every keystroke in the find box block on MB-sized text).
-      if (range.startContainer !== range.endContainer) return;
-      if (range.endOffset - range.startOffset !== term.length) return;
-      if (range.toString().toLowerCase() !== term.toLowerCase()) return;
-      const matches = getMatches(term);
-      const match = matchAtSelection(matches, term);
-      if (match) {
-        lastResolvedRef.current = { match, term };
-        reportMatchIndex(matches.indexOf(match) + 1);
-      } else {
-        reportMatchIndex(null);
-      }
-    };
-    document.addEventListener("selectionchange", onSelectionChange);
-    return () =>
-      document.removeEventListener("selectionchange", onSelectionChange);
-  }, [getMatches, reportMatchIndex]);
-
   const countFn = useCallback(
-    (term: string): number => {
-      // FindBand calls this on every keystroke before any navigation, so it's
-      // the natural place to record the active term for the selection
-      // listener — earlier than searchFn, which only fires on cross-row jumps.
-      activeTermRef.current = term;
-      return getMatches(term).length;
-    },
+    (term: string): number => getMatches(term).length,
     [getMatches]
   );
 
   const searchFn: ExtendedFindFn = useCallback(
     async (term, direction, onContentReady) => {
-      const myId = ++invocationIdRef.current;
-      const isStale = () => myId !== invocationIdRef.current;
+      const mySearchId = ++searchIdRef.current;
+      const myGeneration = generationRef.current;
+      const isStale = () =>
+        mySearchId !== searchIdRef.current ||
+        myGeneration !== generationRef.current;
+
+      // The manifest is async; wait for this generation's build before
+      // matching. A generation bump or superseding search makes us stale.
+      await ensureManifest();
+      if (isStale()) return false;
 
       const matches = getMatches(term);
       if (matches.length === 0) return false;
-      activeTermRef.current = term;
 
       // Match the headroom UI to the user's search direction (forward press
       // collapses the swimlane like manual scroll-down; backward expands it),
@@ -184,32 +212,27 @@ export function useTranscriptSearchSource(
       onHeadroomResetAnchor?.(true);
       onHeadroomSetHidden?.(direction === "forward");
 
-      let position = resolvePosition(
-        matches,
-        lastResolvedRef.current,
-        viewNodesRef.current,
-        selectedRef.current,
-        term
-      );
+      // Starting position: continue from the last resolved match when the term
+      // is unchanged; otherwise start before the first (so forward → 0).
+      const last = lastResolvedRef.current;
+      let position = last && last.term === term ? last.index : -1;
 
-      // Iterate forward/backward until we find a match whose panel actually
-      // mounts. Some events (deeply nested under collapsed subtask spans, or
-      // filtered out of the rendered tree entirely) can be counted by
-      // buildEventToRowMap but never reach the DOM — without this skip, the
-      // user gets stuck at the boundary with no way forward. Cap attempts so
-      // a totally unreachable cluster doesn't spin for 30s+.
+      // Iterate forward/backward until a match's field actually reveals and the
+      // resulting selection validates. Events deeply nested under collapsed
+      // spans (or filtered out) are counted but never reach the DOM; without a
+      // skip the user gets stuck at the boundary. Cap attempts so a totally
+      // unreachable cluster doesn't spin.
       const SKIP_LIMIT = Math.min(matches.length, 8);
-      let next: SampleMatch | null = null;
       for (let attempt = 0; attempt < SKIP_LIMIT; attempt++) {
-        next = pickNext(matches, position, direction);
+        const targetIndex = stepIndex(matches.length, position, direction);
+        const next = matches[targetIndex]!;
 
         if (next.rowKey !== selectedRef.current) {
           onSelect(next.rowKey);
           const ready = await waitForRow(viewNodesRef, next.eventId);
           if (isStale()) return false;
           if (!ready) {
-            position = matches.indexOf(next);
-            lastResolvedRef.current = { match: next, term };
+            position = targetIndex;
             continue;
           }
         }
@@ -223,69 +246,35 @@ export function useTranscriptSearchSource(
         viewNodesRef.current?.scrollToEvent(next.eventId);
         const inDom = await waitForEventInDOM(next.eventId);
         if (isStale()) return false;
-        if (inDom) break;
 
-        // Unreachable event — advance past ALL matches sharing this eventId.
-        // A single nested-but-unrendered event typically has many occurrences;
-        // trying each would burn SKIP_LIMIT on identical failures.
-        const skippedEventId = next.eventId;
-        let lastSkipIdx = matches.indexOf(next);
-        const stride = direction === "forward" ? 1 : -1;
-        for (
-          let idx = lastSkipIdx + stride;
-          idx >= 0 &&
-          idx < matches.length &&
-          matches[idx]!.eventId === skippedEventId;
-          idx += stride
-        ) {
-          lastSkipIdx = idx;
+        const ordinal = inDom ? selectMatch(matches, targetIndex) : null;
+        if (ordinal !== null) {
+          lastResolvedRef.current = { index: ordinal, term };
+          reportMatchIndex(ordinal + 1);
+          onContentReady();
+
+          // Async settling (Prism re-highlight, ExpandablePanel reflow on
+          // setFindTarget) can detach the anchored text node and collapse the
+          // highlight a few hundred ms later. Re-establish the SAME match if
+          // that happens (no-op when it survives naturally).
+          const reselectIndex = ordinal;
+          const timer = window.setTimeout(() => {
+            if (isStale()) return;
+            reselectMatch(matches, reselectIndex);
+          }, 300);
+          pendingTimersRef.current.add(timer);
+          return true;
         }
-        position = lastSkipIdx;
-        lastResolvedRef.current = { match: matches[lastSkipIdx]!, term };
-        next = null;
+
+        // Unreachable / unselectable — advance past ALL matches sharing this
+        // eventId (a single nested-but-unrendered event typically has many
+        // occurrences; trying each would burn SKIP_LIMIT on identical failures).
+        position = lastIndexForEvent(matches, targetIndex, direction);
       }
-      if (!next) return false;
-
-      // Highlight the occurrence this match refers to (its position among the
-      // event's matches), so stepping visits every match in order rather than
-      // relying on window.find, which skips occurrences in collapsed/hidden
-      // DOM. If that exact occurrence isn't selectable (e.g. a non-text field,
-      // or a quoted/JSON variant the literal selector can't match), fall back
-      // to the event's first occurrence. Only report an ordinal when something
-      // was actually selected — otherwise leave the counter alone and let
-      // FindBand fall through to window.find.
-      const eventFirstIdx = matches.findIndex(
-        (m) => m.eventId === next.eventId
-      );
-      const occurrence = matches.indexOf(next) - eventFirstIdx;
-      let resolved = next;
-      let selectedOccurrence = occurrence;
-      let selected = selectTermOccurrence(next.eventId, term, occurrence);
-      if (!selected) {
-        selected = selectTermOccurrence(next.eventId, term, 0);
-        if (selected) {
-          resolved = matches[eventFirstIdx] ?? next;
-          selectedOccurrence = 0;
-        }
-      }
-
-      lastResolvedRef.current = { match: resolved, term };
-      reportMatchIndex(selected ? matches.indexOf(resolved) + 1 : null);
-      onContentReady();
-
-      // Async settling (Prism re-highlighting, ExpandablePanel reflow on
-      // setFindTarget) can detach the anchored text node and collapse the
-      // highlight a few hundred ms later. Re-establish the SAME occurrence if
-      // that happens (no-op when it survives naturally).
-      const reselectId = next.eventId;
-      const timer = window.setTimeout(() => {
-        if (isStale()) return;
-        reselectTermInPanel(reselectId, term, selectedOccurrence);
-      }, 300);
-      pendingTimersRef.current.add(timer);
-      return true;
+      return false;
     },
     [
+      ensureManifest,
       getMatches,
       viewNodesRef,
       onSelect,
@@ -315,212 +304,86 @@ export function useTranscriptSearchSource(
   ]);
 }
 
-function pickNext(
-  matches: SampleMatch[],
+/** Index of the next/previous match (wrapping). `position` is the current index
+ *  or -1 if none (forward → 0, backward → last). */
+function stepIndex(
+  len: number,
   position: number,
   dir: FindDirection
-): SampleMatch {
-  const len = matches.length;
-  // `position` is the index of the "current" match (or -1 if none).
-  if (position < 0) {
-    return dir === "forward" ? matches[0]! : matches[len - 1]!;
-  }
-  return dir === "forward"
-    ? matches[(position + 1) % len]!
-    : matches[(position - 1 + len) % len]!;
-}
-
-function resolvePosition(
-  matches: SampleMatch[],
-  last: { match: SampleMatch; term: string } | null,
-  view: TranscriptViewNodesHandle | null,
-  selected: string | null,
-  term: string
 ): number {
-  // Prefer the last-resolved match when the term hasn't changed.
-  if (last && last.term === term) {
-    const idx = matches.findIndex(
-      (m) =>
-        m.eventId === last.match.eventId &&
-        m.fieldKey === last.match.fieldKey &&
-        m.fieldIndex === last.match.fieldIndex &&
-        m.occurrenceIndex === last.match.occurrenceIndex
-    );
-    if (idx !== -1) return idx;
+  if (position < 0) return dir === "forward" ? 0 : len - 1;
+  return dir === "forward"
+    ? (position + 1) % len
+    : (position - 1 + len) % len;
+}
+
+/** The furthest index in `dir` still sharing `matches[from]`'s eventId — used to
+ *  skip an entire unreachable event in one step. */
+function lastIndexForEvent(
+  matches: Match[],
+  from: number,
+  dir: FindDirection
+): number {
+  const eventId = matches[from]!.eventId;
+  const stride = dir === "forward" ? 1 : -1;
+  let last = from;
+  for (
+    let idx = from + stride;
+    idx >= 0 && idx < matches.length && matches[idx]!.eventId === eventId;
+    idx += stride
+  ) {
+    last = idx;
   }
-  // Fallback: first match in the currently-visible row.
-  const range = view?.getVisibleRange();
-  const flattened = view?.getFlattenedNodes() ?? [];
-  if (!range || flattened.length === 0) return -1;
-  const visibleIds = new Set(
-    flattened.slice(range.startIndex, range.endIndex + 1).map((n) => n.id)
-  );
-  const idx = matches.findIndex(
-    (m) => m.rowKey === selected && visibleIds.has(m.eventId)
-  );
-  return idx;
+  return last;
 }
 
 /**
- * Find the SampleMatch corresponding to the current document selection, if any.
- *
- * Walks up from the selection's startContainer to find an event-panel element
- * (one whose `id` is in `matches`'s eventId set). Then counts how many
- * occurrences of `term` precede the selection within that event's text — that
- * count is the DOM-order occurrence index, which we map to the n-th match in
- * our array for that event.
- *
- * Returns `null` if there is no selection, no event ancestor, or the count
- * runs past the matches we know about (e.g. selection isn't actually on a
- * `term` instance).
+ * Select the occurrence `matches[index]` refers to and VALIDATE it back to an
+ * ordinal. Locates the annotated field element, maps the match's offsets to a
+ * `Range`, sets the window selection, then reads the live selection back via
+ * `fieldSelectionFromRange` → `matchIndexFromField`. Returns the validated
+ * 0-based ordinal, or `null` if the field isn't mounted, the offsets don't map,
+ * or the resulting selection doesn't validate (fail closed — the selection is
+ * left untouched on the no-element / no-range path).
  */
-function matchAtSelection(
-  matches: SampleMatch[],
-  term: string
-): SampleMatch | null {
-  if (typeof window === "undefined" || !term) return null;
+function selectMatch(matches: Match[], index: number): number | null {
+  if (typeof document === "undefined" || typeof window === "undefined") {
+    return null;
+  }
+  const match = matches[index]!;
+  const fieldEl = findFieldElement(document, match);
+  if (!fieldEl) return null;
+  const range = rangeForOffsets(fieldEl, match.start, match.end);
+  if (!range) return null;
+
   const sel = window.getSelection();
-  if (!sel || sel.rangeCount === 0) return null;
-  const range = sel.getRangeAt(0);
-
-  const eventIds = new Set(matches.map((m) => m.eventId));
-  let el: Element | null =
-    range.startContainer.nodeType === Node.ELEMENT_NODE
-      ? (range.startContainer as Element)
-      : range.startContainer.parentElement;
-  while (el && !eventIds.has(el.id)) el = el.parentElement;
-  if (!el) return null;
-  const eventId = el.id;
-
-  const lowered = term.toLowerCase();
-  const walker = searchableTextWalker(el);
-  let occurrenceInEvent = 0;
-  let node: Node | null;
-  while ((node = walker.nextNode())) {
-    const textNode = node as Text;
-    if (textNode === range.startContainer) {
-      const head = textNode.data.slice(0, range.startOffset).toLowerCase();
-      let from = 0;
-      while ((from = head.indexOf(lowered, from)) !== -1) {
-        occurrenceInEvent++;
-        from += lowered.length;
-      }
-      break;
-    }
-    const text = textNode.data.toLowerCase();
-    let from = 0;
-    while ((from = text.indexOf(lowered, from)) !== -1) {
-      occurrenceInEvent++;
-      from += lowered.length;
-    }
-  }
-
-  let seen = 0;
-  for (const m of matches) {
-    if (m.eventId !== eventId) continue;
-    if (seen === occurrenceInEvent) return m;
-    seen++;
-  }
-  return null;
-}
-
-/** TreeWalker over searchable text under `root`, skipping `data-unsearchable`
- *  subtrees (chrome) so both occurrence counting and selection agree on what
- *  text counts. */
-function searchableTextWalker(root: Element): TreeWalker {
-  return document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-    acceptNode: (node) => {
-      let el = node.parentElement;
-      while (el && el !== root) {
-        if (el.hasAttribute("data-unsearchable")) {
-          return NodeFilter.FILTER_REJECT;
-        }
-        el = el.parentElement;
-      }
-      return NodeFilter.FILTER_ACCEPT;
-    },
-  });
-}
-
-/**
- * Range of the `occurrence`-th (0-based) literal instance of `term` under the
- * event `eventId`, skipping `data-unsearchable` subtrees so chrome text isn't
- * counted as an occurrence. A TreeWalker reaches text in collapsed/hidden
- * panels that `window.find` (visible-text only) skips. Null if the panel isn't
- * mounted or has fewer occurrences than expected — note the occurrence index
- * comes from `findAllMatches` (field order), so it only lines up with this
- * DOM walk for plain-text terms in rendered content (not quoted/JSON variants
- * or text that appears in event chrome).
- */
-function termOccurrenceRange(
-  eventId: string,
-  term: string,
-  occurrence: number
-): Range | null {
-  const root = document.getElementById(eventId);
-  if (!root) return null;
-  const lowered = term.toLowerCase();
-  const walker = searchableTextWalker(root);
-  let seen = 0;
-  for (let node; (node = walker.nextNode()); ) {
-    const textNode = node as Text;
-    const text = textNode.data.toLowerCase();
-    let from = 0;
-    while ((from = text.indexOf(lowered, from)) !== -1) {
-      if (seen === occurrence) {
-        const range = document.createRange();
-        range.setStart(textNode, from);
-        range.setEnd(textNode, from + term.length);
-        return range;
-      }
-      seen++;
-      from += lowered.length;
-    }
-  }
-  return null;
-}
-
-/**
- * Make the `occurrence`-th instance of `term` under `eventId` the active
- * selection. Returns false if that occurrence isn't rendered.
- */
-function selectTermOccurrence(
-  eventId: string,
-  term: string,
-  occurrence: number
-): boolean {
-  const range = termOccurrenceRange(eventId, term, occurrence);
-  const sel = window.getSelection();
-  if (!range || !sel) return false;
+  if (!sel) return null;
   sel.removeAllRanges();
   sel.addRange(range);
-  return true;
+
+  const live = sel.rangeCount > 0 ? sel.getRangeAt(0) : null;
+  if (!live) return null;
+  const fieldSel = fieldSelectionFromRange(live);
+  if (!fieldSel) return null;
+  return matchIndexFromField(matches, fieldSel);
 }
 
 /**
  * If a late settling pass (Virtuoso re-render, lazy syntax highlighting,
- * ExpandablePanel reflow) detached the text node the selection was anchored
- * on, re-anchor to the SAME `occurrence` in the panel. No-op when the existing
- * highlight is intact.
+ * ExpandablePanel reflow) detached the selected text node, re-select the SAME
+ * match. No-op when the existing highlight still validates to this ordinal.
  */
-function reselectTermInPanel(
-  eventId: string,
-  term: string,
-  occurrence: number
-): boolean {
-  const root = document.getElementById(eventId);
-  if (!root) return false;
+function reselectMatch(matches: Match[], index: number): void {
+  if (typeof window === "undefined") return;
   const sel = window.getSelection();
-  if (!sel) return false;
-  if (
-    sel.rangeCount > 0 &&
-    !sel.getRangeAt(0).collapsed &&
-    sel.getRangeAt(0).toString().toLowerCase() === term.toLowerCase() &&
-    root.contains(sel.getRangeAt(0).startContainer)
-  ) {
-    return true; // existing highlight is intact — don't disturb
+  if (!sel) return;
+  if (sel.rangeCount > 0 && !sel.getRangeAt(0).collapsed) {
+    const fieldSel = fieldSelectionFromRange(sel.getRangeAt(0));
+    if (fieldSel && matchIndexFromField(matches, fieldSel) === index) {
+      return; // existing highlight is intact — don't disturb
+    }
   }
-  return selectTermOccurrence(eventId, term, occurrence);
+  selectMatch(matches, index);
 }
 
 function raf(): Promise<void> {

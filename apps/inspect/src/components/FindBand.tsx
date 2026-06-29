@@ -140,35 +140,30 @@ export const FindBand: FC = () => {
         : null;
       const savedScrollTop = savedScrollParent?.scrollTop ?? 0;
 
-      // Explicit navigation (Next/Prev/F3/Ctrl+G/Enter-step): step a "selecting"
-      // search source's match list directly. The transcript source selects the
-      // exact occurrence itself — visiting every match, including ones in
-      // collapsed/hidden DOM that window.find skips — and reports its ordinal;
-      // we confirm it actually resolved this step via a fresh non-null report.
-      // Only do this when a selecting source is active: a plain VirtualList
-      // (chat) only scrolls from the visible edge and would skip on-screen
-      // matches, so it (and source-less static tabs, and the typing search)
-      // stays on the window.find path.
+      // A "selecting" source (the transcript) owns matching for its content: it
+      // selects the exact occurrence itself — visiting every match, including
+      // ones in collapsed/hidden DOM that window.find skips — and reports a
+      // *validated* ordinal. When such a source is active we drive BOTH typing
+      // and explicit navigation through it exclusively, NEVER window.find
+      // (window.find can select chrome and desync the counter from the
+      // highlight). We confirm it actually resolved via a fresh non-null report;
+      // on failure we fail closed (no result, no window.find fallback) rather
+      // than advance the counter to a match we couldn't select. A plain
+      // VirtualList (chat) only scrolls from the visible edge and would skip
+      // on-screen matches, so it — and source-less static tabs — keep the
+      // window.find path.
       let result: boolean;
       let sourceSelected = false;
-      if (reveal && total > 0 && hasSelectingSource()) {
+      if (total > 0 && hasSelectingSource()) {
         const seqBefore = matchIndexReportRef.current.seq;
         const handled = await extendedFindTerm(
           searchTerm,
           back ? "backward" : "forward"
         );
         const report = matchIndexReportRef.current;
-        if (handled && report.seq > seqBefore && report.index !== null) {
-          result = true;
-          sourceSelected = true;
-        } else {
-          result = await findExtendedInDOM(
-            searchTerm,
-            back,
-            lastFoundItem.current,
-            extendedFindTerm
-          );
-        }
+        sourceSelected =
+          handled && report.seq > seqBefore && report.index !== null;
+        result = sourceSelected;
       } else {
         result = await findExtendedInDOM(
           searchTerm,
