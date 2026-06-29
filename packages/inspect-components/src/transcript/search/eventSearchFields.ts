@@ -1,0 +1,109 @@
+import type {
+  ChatMessage,
+  Content,
+  Event,
+  ModelEvent,
+} from "@tsmono/inspect-common/types";
+import { isJson } from "@tsmono/util";
+
+/**
+ * The kind of a searchable field, which determines how the matcher derives the
+ * field's canonical `text` from `rawText`:
+ * - `plain`: `text === rawText` verbatim (e.g. a model name).
+ * - `markdown`: `text === canonicalMarkdownText(rawText)` (a markdown body that
+ *   the renderer pipes through `MarkdownDiv`).
+ */
+export type FieldKind = "plain" | "markdown";
+
+/**
+ * One searchable field of an event, in render order. `fieldIndex` is the
+ * 0-based occurrence of this `fieldKey` within the event. See
+ * design/transcript-find-spec.md "Shared field enumerator".
+ */
+export interface FieldDescriptor {
+  fieldKey: string;
+  fieldIndex: number;
+  kind: FieldKind;
+  rawText: string;
+}
+
+/**
+ * The single source of truth for an event's in-scope searchable fields, in the
+ * order the views render them. BOTH the renderer (to annotate the canonical
+ * element with `data-search-*`) and the matcher (to build the match list)
+ * consume this so they cannot drift.
+ *
+ * Fail-closed: a descriptor is emitted only for field kinds whose canonical text
+ * can be reproduced off-DOM today — plain-text fields (verbatim) and plain
+ * markdown body (a non-JSON `text` content item). Everything else (JSON-rendered
+ * text, images, reasoning, tool-result structured views, citations) is omitted.
+ *
+ * Currently enumerates the `model` event kind; other kinds return [] until their
+ * fields are brought in scope.
+ */
+export function eventSearchFields(event: Event): FieldDescriptor[] {
+  if (event.event === "model") {
+    return modelEventFields(event);
+  }
+  return [];
+}
+
+function modelEventFields(event: ModelEvent): FieldDescriptor[] {
+  const fields: FieldDescriptor[] = [];
+  const counts = new Map<string, number>();
+
+  const push = (fieldKey: string, kind: FieldKind, rawText: string) => {
+    const fieldIndex = counts.get(fieldKey) ?? 0;
+    counts.set(fieldKey, fieldIndex + 1);
+    fields.push({ fieldKey, fieldIndex, kind, rawText });
+  };
+
+  // Chrome prefix "Model Call:" is a label; the model name itself is a field.
+  if (event.model) {
+    push("model", "plain", event.model);
+  }
+
+  // Render order mirrors ModelEventView's Summary tab: input messages
+  // (user/system) first, then the assistant output choices.
+  for (const message of event.input) {
+    pushMessageBodies(message, message.role, push);
+  }
+  for (const choice of event.output?.choices ?? []) {
+    pushMessageBodies(choice.message, "output", push);
+  }
+
+  return fields;
+}
+
+function pushMessageBodies(
+  message: ChatMessage,
+  fieldKey: string,
+  push: (fieldKey: string, kind: FieldKind, rawText: string) => void
+): void {
+  for (const text of markdownBodies(message.content)) {
+    push(fieldKey, "markdown", text);
+  }
+}
+
+/**
+ * The markdown body texts of a message's content, in render order — one per
+ * `text` content item that the chat view renders through markdown. A string
+ * content is a single body. JSON-detected text (rendered as a JSON panel, not
+ * markdown) and all non-text content (images, reasoning, tool use, …) are
+ * omitted, matching MessageContent.tsx's renderers.
+ */
+function markdownBodies(content: string | Array<Content>): string[] {
+  const items = typeof content === "string" ? [content] : content;
+  const bodies: string[] = [];
+  for (const item of items) {
+    const text = typeof item === "string" ? item : itemText(item);
+    if (text !== undefined && !isJson(text)) {
+      bodies.push(text);
+    }
+  }
+  return bodies;
+}
+
+function itemText(item: Content): string | undefined {
+  return item.type === "text" ? item.text : undefined;
+}

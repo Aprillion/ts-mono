@@ -1,6 +1,7 @@
 export * from "./AutocompleteInput";
 export * from "./AnsiDisplay";
 export * from "./AppErrorBoundary";
+export * from "./canonicalMarkdownText";
 export * from "./Card";
 export * from "./ComponentIconContext";
 export * from "./CopyButton";
