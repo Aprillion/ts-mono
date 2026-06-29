@@ -148,6 +148,27 @@ chrome and is never a field.
   sample change, superseded search, new term, regenerated manifest) must not
   move the selection or counter — even if the term is unchanged.
 
+## Shared field enumerator (manifest keystone, concrete)
+
+ONE pure helper, `eventSearchFields(event): FieldDescriptor[]`, is the single
+source of truth for "what searchable fields does this event have, in render
+order." `FieldDescriptor = { fieldKey, fieldIndex, kind, rawText }`. BOTH sides
+consume it so they cannot drift:
+- The **renderer**, when it renders a searchable body (a `RenderedText` element),
+  looks up its descriptor and puts `data-search-*` on **that exact element** —
+  the one whose `textContent` equals the field's canonical text. Citations
+  (sibling), JSON panels, reasoning chrome, role headers, titles, tabs are
+  different/sibling elements and get no annotation → structurally uncounted.
+- The **matcher** builds each `SearchField.text` from the descriptor: for
+  markdown `kind`, `text = canonicalMarkdownText(rawText)`; for plain `kind`,
+  `text = rawText`.
+
+Initial in-scope `kind`s (fail-closed): plain-text fields (model name, tool
+function, step name, error/traceback) and plain markdown body (a `text` content
+item that is NOT JSON). Excluded for now (no descriptor emitted): JSON-rendered
+content, images, reasoning (collapsed + special-cased), tool-result structured
+views. Widen kind-by-kind later; the invariant holds for whatever is enumerated.
+
 ## Module boundary
 
 Pure, DOM-free **match model** (subagent rebuilds this from spec + tests):
