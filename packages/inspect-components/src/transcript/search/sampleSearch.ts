@@ -1,5 +1,5 @@
 import type { Event } from "@tsmono/inspect-common/types";
-import { prepareSearchTerm } from "@tsmono/react/components";
+import { prepareSearchTerm } from "@tsmono/util";
 
 import { extractEventFields } from "../eventText";
 import { TimelineSpan } from "../timeline/core";

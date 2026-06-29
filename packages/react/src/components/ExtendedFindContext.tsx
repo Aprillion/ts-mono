@@ -24,6 +24,9 @@ export type ExtendedFindFn = (
 // Count total matches across all data items
 export type ExtendedCountFn = (term: string) => number;
 
+// 1-based ordinal of the currently-highlighted match, or null when unresolved.
+export type MatchIndexListener = (index: number | null) => void;
+
 // The context provides an extended search function and a way for the active
 // virtual lists to register themselves.
 interface ExtendedFindContextType {
@@ -34,6 +37,15 @@ interface ExtendedFindContextType {
   registerVirtualList: (id: string, searchFn: ExtendedFindFn) => () => void;
   countAllMatches: (term: string) => number;
   registerMatchCounter: (id: string, countFn: ExtendedCountFn) => () => void;
+  // Search sources report the resolved match's ordinal; the find UI subscribes
+  // so its counter tracks the highlighted match, not a blind step count.
+  reportMatchIndex: (index: number | null) => void;
+  subscribeMatchIndex: (listener: MatchIndexListener) => () => void;
+  // A "selecting" source (the transcript) selects the exact match itself and
+  // reports its ordinal, so explicit nav can step its match list directly. A
+  // plain VirtualList only scrolls, so the find UI must NOT route through it.
+  registerSelectingSource: (id: string) => () => void;
+  hasSelectingSource: () => boolean;
 }
 
 const ExtendedFindContext = createContext<ExtendedFindContextType | null>(null);
@@ -47,6 +59,8 @@ export const ExtendedFindProvider = ({
 }: ExtendedFindProviderProps) => {
   const virtualLists = useRef<Map<string, ExtendedFindFn>>(new Map());
   const matchCounters = useRef<Map<string, ExtendedCountFn>>(new Map());
+  const matchIndexListeners = useRef<Set<MatchIndexListener>>(new Set());
+  const selectingSources = useRef<Set<string>>(new Set());
 
   const extendedFindTerm = useCallback(
     async (term: string, direction: FindDirection): Promise<boolean> => {
@@ -113,11 +127,43 @@ export const ExtendedFindProvider = ({
     []
   );
 
+  const reportMatchIndex = useCallback((index: number | null): void => {
+    for (const listener of matchIndexListeners.current) {
+      listener(index);
+    }
+  }, []);
+
+  const subscribeMatchIndex = useCallback(
+    (listener: MatchIndexListener): (() => void) => {
+      matchIndexListeners.current.add(listener);
+      return () => {
+        matchIndexListeners.current.delete(listener);
+      };
+    },
+    []
+  );
+
+  const registerSelectingSource = useCallback((id: string): (() => void) => {
+    selectingSources.current.add(id);
+    return () => {
+      selectingSources.current.delete(id);
+    };
+  }, []);
+
+  const hasSelectingSource = useCallback(
+    (): boolean => selectingSources.current.size > 0,
+    []
+  );
+
   const contextValue: ExtendedFindContextType = {
     extendedFindTerm,
     registerVirtualList,
     countAllMatches,
     registerMatchCounter,
+    reportMatchIndex,
+    subscribeMatchIndex,
+    registerSelectingSource,
+    hasSelectingSource,
   };
 
   return (

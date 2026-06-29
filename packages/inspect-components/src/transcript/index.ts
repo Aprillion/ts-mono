@@ -86,7 +86,6 @@ export { EventRow } from "./event/EventRow";
 export { EventSection } from "./event/EventSection";
 export { EventNav } from "./event/EventNav";
 export { EventNavs } from "./event/EventNavs";
-export { EventTimingPanel } from "./event/EventTimingPanel";
 export { EventProgressPanel } from "./event/EventProgressPanel";
 
 // State components

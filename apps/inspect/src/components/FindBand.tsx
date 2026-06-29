@@ -26,8 +26,20 @@ const findConfig = {
 export const FindBand: FC = () => {
   const searchBoxRef = useRef<HTMLInputElement>(null);
   const storeHideFind = useStore((state) => state.appActions.hideFind);
-  const { extendedFindTerm, countAllMatches } = useExtendedFind();
+  const {
+    extendedFindTerm,
+    countAllMatches,
+    subscribeMatchIndex,
+    hasSelectingSource,
+  } = useExtendedFind();
   const setFindTarget = useFindTargetSetter();
+  // Last ordinal a search source reported, with a monotonic seq so explicit
+  // navigation can tell whether THIS step's source call reported (transcript)
+  // or not (a generic VirtualList only scrolls and never reports).
+  const matchIndexReportRef = useRef<{ seq: number; index: number | null }>({
+    seq: 0,
+    index: null,
+  });
   const lastFoundItem = useRef<{
     text: string;
     offset: number;
@@ -128,12 +140,43 @@ export const FindBand: FC = () => {
         : null;
       const savedScrollTop = savedScrollParent?.scrollTop ?? 0;
 
-      const result = await findExtendedInDOM(
-        searchTerm,
-        back,
-        lastFoundItem.current,
-        extendedFindTerm
-      );
+      // Explicit navigation (Next/Prev/F3/Ctrl+G/Enter-step): step a "selecting"
+      // search source's match list directly. The transcript source selects the
+      // exact occurrence itself — visiting every match, including ones in
+      // collapsed/hidden DOM that window.find skips — and reports its ordinal;
+      // we confirm it actually resolved this step via a fresh non-null report.
+      // Only do this when a selecting source is active: a plain VirtualList
+      // (chat) only scrolls from the visible edge and would skip on-screen
+      // matches, so it (and source-less static tabs, and the typing search)
+      // stays on the window.find path.
+      let result: boolean;
+      let sourceSelected = false;
+      if (reveal && total > 0 && hasSelectingSource()) {
+        const seqBefore = matchIndexReportRef.current.seq;
+        const handled = await extendedFindTerm(
+          searchTerm,
+          back ? "backward" : "forward"
+        );
+        const report = matchIndexReportRef.current;
+        if (handled && report.seq > seqBefore && report.index !== null) {
+          result = true;
+          sourceSelected = true;
+        } else {
+          result = await findExtendedInDOM(
+            searchTerm,
+            back,
+            lastFoundItem.current,
+            extendedFindTerm
+          );
+        }
+      } else {
+        result = await findExtendedInDOM(
+          searchTerm,
+          back,
+          lastFoundItem.current,
+          extendedFindTerm
+        );
+      }
 
       if (searchIdRef.current !== thisSearchId) {
         return;
@@ -177,7 +220,10 @@ export const FindBand: FC = () => {
             setFindTarget({ term: searchTerm, eventId: "" });
           }
 
-          if (isNewMatch) {
+          // The transcript source reports the exact ordinal (the subscription
+          // below drives the counter). Sources that don't report — the chat
+          // VirtualList, source-less static tabs — get a positional step count.
+          if (!sourceSelected && isNewMatch) {
             setCurrentMatchIndex((prev) => {
               if (back) {
                 return prev <= 1 ? total : prev - 1;
@@ -218,7 +264,7 @@ export const FindBand: FC = () => {
         }
       }
     },
-    [setFindTarget, extendedFindTerm, countAllMatches]
+    [setFindTarget, extendedFindTerm, countAllMatches, hasSelectingSource]
   );
 
   useEffect(() => {
@@ -240,6 +286,22 @@ export const FindBand: FC = () => {
       setFindTarget(null);
     };
   }, [setFindTarget]);
+
+  // A search source reports the resolved match's ordinal. Record it (with a
+  // bumped seq, so explicit navigation can tell a fresh report apart) and, when
+  // it's a real match, show it. Null = the selection isn't a known match (e.g.
+  // chrome) — keep the last ordinal rather than flash a wrong one.
+  useEffect(
+    () =>
+      subscribeMatchIndex((index) => {
+        matchIndexReportRef.current = {
+          seq: matchIndexReportRef.current.seq + 1,
+          index,
+        };
+        if (index !== null) setCurrentMatchIndex(index);
+      }),
+    [subscribeMatchIndex]
+  );
 
   const revealCurrentMatch = useCallback(() => {
     debouncedSearchRef.current?.cancel();

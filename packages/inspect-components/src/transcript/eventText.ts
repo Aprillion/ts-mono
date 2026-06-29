@@ -60,17 +60,14 @@ export const extractEventFields = (event: EventType): [string, string][] => {
   switch (event.event) {
     case "model": {
       const modelEvent = event;
+      // Order mirrors the rendered Summary view (ModelEventView): the model
+      // name in the title, then the user/system input messages, then the
+      // assistant output. Search steps and clipboard copy both follow this,
+      // so find's ordinal lines up with the highlighted occurrence and copied
+      // text reads chronologically (prompt → response).
       // Model name (displayed in title)
       if (modelEvent.model) {
         fields.push(["model", modelEvent.model]);
-      }
-      // Extract text from model output
-      if (modelEvent.output?.choices) {
-        for (const choice of modelEvent.output.choices) {
-          for (const text of extractContentText(choice.message.content)) {
-            fields.push(["output", text]);
-          }
-        }
       }
       // Extract text from user/system input messages shown in the view
       if (modelEvent.input) {
@@ -79,6 +76,14 @@ export const extractEventFields = (event: EventType): [string, string][] => {
             for (const text of extractContentText(msg.content)) {
               fields.push([msg.role, text]);
             }
+          }
+        }
+      }
+      // Extract text from model output
+      if (modelEvent.output?.choices) {
+        for (const choice of modelEvent.output.choices) {
+          for (const text of extractContentText(choice.message.content)) {
+            fields.push(["output", text]);
           }
         }
       }

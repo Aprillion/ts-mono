@@ -609,6 +609,28 @@ describe("eventSearchText", () => {
     expect(texts).toContain("hello world");
   });
 
+  test("model: fields ordered model -> input -> output (matches display + copy)", () => {
+    const fields = extractEventFields(
+      makeNode({
+        event: "model",
+        model: "gpt-4",
+        role: null,
+        input: [{ role: "user", content: "the prompt", id: null }],
+        output: {
+          choices: [{ message: { content: "the answer", role: "assistant" } }],
+        },
+        timestamp: "2024-01-01T00:00:00Z",
+      }).event
+    );
+    // Input before output so find's ordinal matches the highlighted occurrence
+    // (DOM renders input then output) and copied text reads prompt -> response.
+    expect(fields).toEqual([
+      ["model", "gpt-4"],
+      ["user", "the prompt"],
+      ["output", "the answer"],
+    ]);
+  });
+
   test("step: includes name and type as separate values", () => {
     const texts = eventSearchText(
       makeNode({

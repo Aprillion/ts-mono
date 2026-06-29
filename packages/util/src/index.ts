@@ -25,6 +25,7 @@ export * from "./numeric";
 export * from "./mime";
 export * from "./object";
 export * from "./path";
+export * from "./prepareSearchTerm";
 export * from "./python";
 export * from "./queue";
 export * from "./retry";

@@ -66,7 +66,12 @@ export function useTranscriptSearchSource(
     onHeadroomSetHidden,
     id = DEFAULT_ID,
   } = options;
-  const { registerVirtualList, registerMatchCounter } = useExtendedFind();
+  const {
+    registerVirtualList,
+    registerMatchCounter,
+    reportMatchIndex,
+    registerSelectingSource,
+  } = useExtendedFind();
   const setFindTarget = useFindTargetSetter();
 
   const eventToRow = useMemo(() => buildEventToRowMap(rows), [rows]);
@@ -140,12 +145,17 @@ export function useTranscriptSearchSource(
       if (range.toString().toLowerCase() !== term.toLowerCase()) return;
       const matches = getMatches(term);
       const match = matchAtSelection(matches, term);
-      if (match) lastResolvedRef.current = { match, term };
+      if (match) {
+        lastResolvedRef.current = { match, term };
+        reportMatchIndex(matches.indexOf(match) + 1);
+      } else {
+        reportMatchIndex(null);
+      }
     };
     document.addEventListener("selectionchange", onSelectionChange);
     return () =>
       document.removeEventListener("selectionchange", onSelectionChange);
-  }, [getMatches]);
+  }, [getMatches, reportMatchIndex]);
 
   const countFn = useCallback(
     (term: string): number => {
@@ -236,28 +246,41 @@ export function useTranscriptSearchSource(
       }
       if (!next) return false;
 
-      // Position the cursor so FindBand's subsequent `window.find` lands on
-      // the term inside OUR chosen panel. window.find advances FROM the
-      // current selection (it does NOT match at the cursor itself), so
-      // collapse JUST BEFORE the term going forward and JUST AFTER going
-      // backward. Bails silently if the term isn't rendered in the panel
-      // (e.g. a JSON-stringified field) — window.find then picks whatever.
-      positionSelectionAroundTerm(next.eventId, term, direction);
+      // Highlight the occurrence this match refers to (its position among the
+      // event's matches), so stepping visits every match in order rather than
+      // relying on window.find, which skips occurrences in collapsed/hidden
+      // DOM. If that exact occurrence isn't selectable (e.g. a non-text field,
+      // or a quoted/JSON variant the literal selector can't match), fall back
+      // to the event's first occurrence. Only report an ordinal when something
+      // was actually selected — otherwise leave the counter alone and let
+      // FindBand fall through to window.find.
+      const eventFirstIdx = matches.findIndex(
+        (m) => m.eventId === next.eventId
+      );
+      const occurrence = matches.indexOf(next) - eventFirstIdx;
+      let resolved = next;
+      let selectedOccurrence = occurrence;
+      let selected = selectTermOccurrence(next.eventId, term, occurrence);
+      if (!selected) {
+        selected = selectTermOccurrence(next.eventId, term, 0);
+        if (selected) {
+          resolved = matches[eventFirstIdx] ?? next;
+          selectedOccurrence = 0;
+        }
+      }
 
-      lastResolvedRef.current = { match: next, term };
+      lastResolvedRef.current = { match: resolved, term };
+      reportMatchIndex(selected ? matches.indexOf(resolved) + 1 : null);
       onContentReady();
 
-      // The transcript renders many code blocks that get syntax-highlighted
-      // asynchronously (Prism splitting `<code>` text into many spans), and
-      // many ExpandablePanels that re-render on `setFindTarget`. Either
-      // can detach the text node `window.find` just anchored on, silently
-      // collapsing the highlight ~hundreds of ms after the search lands.
-      // Re-establish the selection after settling, but only if the current
-      // highlight is missing or wrong (no-op when it survives naturally).
+      // Async settling (Prism re-highlighting, ExpandablePanel reflow on
+      // setFindTarget) can detach the anchored text node and collapse the
+      // highlight a few hundred ms later. Re-establish the SAME occurrence if
+      // that happens (no-op when it survives naturally).
       const reselectId = next.eventId;
       const timer = window.setTimeout(() => {
         if (isStale()) return;
-        reselectTermInPanel(reselectId, term);
+        reselectTermInPanel(reselectId, term, selectedOccurrence);
       }, 300);
       pendingTimersRef.current.add(timer);
       return true;
@@ -269,17 +292,27 @@ export function useTranscriptSearchSource(
       setFindTarget,
       onHeadroomResetAnchor,
       onHeadroomSetHidden,
+      reportMatchIndex,
     ]
   );
 
   useEffect(() => {
     const unCount = registerMatchCounter(id, countFn);
     const unSearch = registerVirtualList(id, searchFn);
+    const unSelecting = registerSelectingSource(id);
     return () => {
       unCount();
       unSearch();
+      unSelecting();
     };
-  }, [id, registerMatchCounter, registerVirtualList, countFn, searchFn]);
+  }, [
+    id,
+    registerMatchCounter,
+    registerVirtualList,
+    registerSelectingSource,
+    countFn,
+    searchFn,
+  ]);
 }
 
 function pickNext(
@@ -360,7 +393,7 @@ function matchAtSelection(
   const eventId = el.id;
 
   const lowered = term.toLowerCase();
-  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  const walker = searchableTextWalker(el);
   let occurrenceInEvent = 0;
   let node: Node | null;
   while ((node = walker.nextNode())) {
@@ -391,68 +424,90 @@ function matchAtSelection(
   return null;
 }
 
+/** TreeWalker over searchable text under `root`, skipping `data-unsearchable`
+ *  subtrees (chrome) so both occurrence counting and selection agree on what
+ *  text counts. */
+function searchableTextWalker(root: Element): TreeWalker {
+  return document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode: (node) => {
+      let el = node.parentElement;
+      while (el && el !== root) {
+        if (el.hasAttribute("data-unsearchable")) {
+          return NodeFilter.FILTER_REJECT;
+        }
+        el = el.parentElement;
+      }
+      return NodeFilter.FILTER_ACCEPT;
+    },
+  });
+}
+
 /**
- * Walk the DOM under the event element with `eventId` and place a collapsed
- * selection adjacent to the FIRST occurrence of `term` (forward) or the LAST
- * occurrence (backward), so FindBand's subsequent `window.find` advances onto
- * exactly that occurrence.
- *
- * Forward: cursor BEFORE the first match — `window.find` searches forward
- * from the cursor and lands on the term.
- * Backward: cursor AFTER the last match — `window.find` with backward=true
- * searches backward from the cursor and lands on the term. (If we collapsed
- * before instead, backward would skip past it and either find nothing or
- * land in unrelated DOM, which makes findExtendedInDOM return false and the
- * counter fail to update.)
- *
- * If the panel isn't mounted or doesn't render the term as text (e.g. the
- * match was in a JSON-stringified field we don't render), bail silently —
- * FindBand will fall back to its default windowFind behavior.
+ * Range of the `occurrence`-th (0-based) literal instance of `term` under the
+ * event `eventId`, skipping `data-unsearchable` subtrees so chrome text isn't
+ * counted as an occurrence. A TreeWalker reaches text in collapsed/hidden
+ * panels that `window.find` (visible-text only) skips. Null if the panel isn't
+ * mounted or has fewer occurrences than expected — note the occurrence index
+ * comes from `findAllMatches` (field order), so it only lines up with this
+ * DOM walk for plain-text terms in rendered content (not quoted/JSON variants
+ * or text that appears in event chrome).
  */
-function positionSelectionAroundTerm(
+function termOccurrenceRange(
   eventId: string,
   term: string,
-  direction: FindDirection
-): boolean {
+  occurrence: number
+): Range | null {
   const root = document.getElementById(eventId);
-  if (!root) return false;
+  if (!root) return null;
   const lowered = term.toLowerCase();
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-  let target: { node: Text; idx: number } | null = null;
+  const walker = searchableTextWalker(root);
+  let seen = 0;
   for (let node; (node = walker.nextNode()); ) {
     const textNode = node as Text;
     const text = textNode.data.toLowerCase();
     let from = 0;
     while ((from = text.indexOf(lowered, from)) !== -1) {
-      target = { node: textNode, idx: from };
+      if (seen === occurrence) {
+        const range = document.createRange();
+        range.setStart(textNode, from);
+        range.setEnd(textNode, from + term.length);
+        return range;
+      }
+      seen++;
       from += lowered.length;
-      if (direction === "forward") break;
     }
-    if (target && direction === "forward") break;
   }
-  if (!target) return false;
+  return null;
+}
+
+/**
+ * Make the `occurrence`-th instance of `term` under `eventId` the active
+ * selection. Returns false if that occurrence isn't rendered.
+ */
+function selectTermOccurrence(
+  eventId: string,
+  term: string,
+  occurrence: number
+): boolean {
+  const range = termOccurrenceRange(eventId, term, occurrence);
   const sel = window.getSelection();
-  if (!sel) return false;
-  const range = document.createRange();
-  range.setStart(
-    target.node,
-    direction === "forward" ? target.idx : target.idx + term.length
-  );
-  range.collapse(true);
+  if (!range || !sel) return false;
   sel.removeAllRanges();
   sel.addRange(range);
   return true;
 }
 
 /**
- * If the current selection no longer covers `term` inside the panel
- * (because a late settling pass — Virtuoso re-render, lazy syntax
- * highlighting, ExpandablePanel auto-expand reflow — detached the text
- * node `window.find` was anchored on), re-anchor the selection to the
- * first occurrence of `term` in the panel. Returns false (no-op) when
- * the existing highlight is intact.
+ * If a late settling pass (Virtuoso re-render, lazy syntax highlighting,
+ * ExpandablePanel reflow) detached the text node the selection was anchored
+ * on, re-anchor to the SAME `occurrence` in the panel. No-op when the existing
+ * highlight is intact.
  */
-function reselectTermInPanel(eventId: string, term: string): boolean {
+function reselectTermInPanel(
+  eventId: string,
+  term: string,
+  occurrence: number
+): boolean {
   const root = document.getElementById(eventId);
   if (!root) return false;
   const sel = window.getSelection();
@@ -465,19 +520,7 @@ function reselectTermInPanel(eventId: string, term: string): boolean {
   ) {
     return true; // existing highlight is intact — don't disturb
   }
-  const lowered = term.toLowerCase();
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-  for (let node; (node = walker.nextNode()); ) {
-    const idx = (node.textContent ?? "").toLowerCase().indexOf(lowered);
-    if (idx === -1) continue;
-    const range = document.createRange();
-    range.setStart(node, idx);
-    range.setEnd(node, idx + term.length);
-    sel.removeAllRanges();
-    sel.addRange(range);
-    return true;
-  }
-  return false;
+  return selectTermOccurrence(eventId, term, occurrence);
 }
 
 function raf(): Promise<void> {

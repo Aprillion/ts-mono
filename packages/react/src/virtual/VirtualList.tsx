@@ -10,12 +10,13 @@ import {
   type Ref,
 } from "react";
 
+import { prepareSearchTerm } from "@tsmono/util";
+
 import {
   useExtendedFind,
   type ExtendedCountFn,
   type ExtendedFindFn,
 } from "../components/ExtendedFindContext";
-import { prepareSearchTerm } from "../components/prepareSearchTerm";
 import { PulsingDots } from "../components/PulsingDots";
 import { usePreviousValue } from "../hooks/usePreviousValue";
 import { useProperty } from "../hooks/useProperty";
