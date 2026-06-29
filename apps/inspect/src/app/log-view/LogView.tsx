@@ -10,7 +10,12 @@ import {
   useRef,
 } from "react";
 
-import { EmptyPanel, TabPanel, TabSet } from "@tsmono/react/components";
+import {
+  EmptyPanel,
+  PulsingDots,
+  TabPanel,
+  TabSet,
+} from "@tsmono/react/components";
 import { useScrollDirection } from "@tsmono/react/hooks";
 
 import { useEvalSpec, useRefreshLog } from "../../state/hooks";
@@ -34,6 +39,7 @@ export const LogView: FC = () => {
   const navigation = useLogNavigation();
 
   const selectedLogDetails = useStore((state) => state.log.selectedLogDetails);
+  const loading = useStore((state) => state.app.status.loading);
   const evalSpec = useEvalSpec();
   const runningMetrics = useStore(
     (state) => state.log.pendingSampleSummaries?.metrics
@@ -116,7 +122,15 @@ export const LogView: FC = () => {
   );
 
   if (evalSpec === undefined) {
-    return <EmptyPanel />;
+    // No eval spec yet: show a loading indicator while a log is being fetched
+    // (e.g. right after navigating to another eval), otherwise an empty panel.
+    // The previous eval's data has already been cleared on navigation, so this
+    // never renders stale content.
+    return (
+      <EmptyPanel>
+        {loading > 0 ? <PulsingDots size="large" text="Loading log…" /> : null}
+      </EmptyPanel>
+    );
   } else {
     const tabTools = Object.values(tabs)
       .filter((tab) => tab !== undefined)
