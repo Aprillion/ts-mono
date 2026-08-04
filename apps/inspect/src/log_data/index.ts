@@ -149,5 +149,6 @@ export { useSampleMessages } from "./sampleMessages";
 export { useChunkedSample, type ChunkedSampleData } from "./chunkedSampleQuery";
 export { useSampleSummaries } from "./sampleSummaries";
 export { type ScorerMap, scorerMetricKey, useScoreSchema } from "./scoreSchema";
+export { FetchEngineController } from "./FetchEngineController";
 export { useDatabaseStats } from "./useFetchEngineStatus";
 export { useLogsSync } from "./useLogsSync";
