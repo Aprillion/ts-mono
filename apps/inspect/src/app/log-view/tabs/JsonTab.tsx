@@ -103,7 +103,10 @@ export const JsonTab: FC<JsonTabProps> = ({ logFile, json }) => {
   } else {
     return (
       <div className={styles.jsonTab}>
-        <StaticFindRegion findKey={`log-json:${logFile ?? ""}`} contentKey={json}>
+        <StaticFindRegion
+          findKey={`log-json:${logFile ?? ""}`}
+          contentKey={json}
+        >
           <JSONPanel id="task-json-contents" json={json} simple={true} />
         </StaticFindRegion>
       </div>
