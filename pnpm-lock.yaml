@@ -22,7 +22,7 @@ overrides:
   fast-uri: ^3.1.5
   immutable: ^5.1.8
   ws: ^8.20.1
-  esbuild: ^0.28.1
+  esbuild: ^0.28.2
   '@babel/core': ^7.29.6
   undici: ^7.28.0
   dompurify: ^3.4.13
@@ -42,7 +42,7 @@ importers:
         specifier: workspace:*
         version: link:tooling/prettier-config
       esbuild:
-        specifier: ^0.28.1
+        specifier: ^0.28.2
         version: 0.28.2
       picocolors:
         specifier: ^1.1.1
@@ -51,7 +51,7 @@ importers:
         specifier: ^3.9.6
         version: 3.9.6
       turbo:
-        specifier: ^2.10.8
+        specifier: ^2.10.9
         version: 2.10.9
 
   apps/inspect:
@@ -69,7 +69,7 @@ importers:
         specifier: ^6.5.4
         version: 6.7.1
       '@codemirror/view':
-        specifier: ^6.43.7
+        specifier: ^6.43.8
         version: 6.43.8
       '@lezer/highlight':
         specifier: ^1.2.2
@@ -120,7 +120,7 @@ importers:
         specifier: ^0.1.1
         version: 0.1.1
       immer:
-        specifier: ^11.1.15
+        specifier: ^11.1.16
         version: 11.1.16
       json5:
         specifier: ^2.2.3
@@ -166,7 +166,7 @@ importers:
         specifier: ^10.4.1
         version: 10.4.1
       '@testing-library/jest-dom':
-        specifier: ^7.0.0
+        specifier: ^7.0.1
         version: 7.0.1(@testing-library/dom@10.4.1)(vitest@4.1.10(@types/node@26.2.0)(jsdom@30.0.1)(msw@2.15.0(@types/node@26.2.0)(@typescript/typescript6@6.0.2))(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(yaml@2.9.0)))
       '@testing-library/react':
         specifier: ^16.3.1
@@ -202,7 +202,7 @@ importers:
         specifier: ^5.2.11
         version: 5.2.11
       '@types/node':
-        specifier: ^26.1.2
+        specifier: ^26.2.0
         version: 26.2.0
       '@types/prismjs':
         specifier: ^1.26.5
@@ -244,7 +244,7 @@ importers:
         specifier: ^1.1.1
         version: 1.1.1
       postcss:
-        specifier: ^8.5.25
+        specifier: ^8.5.26
         version: 8.5.26
       prettier:
         specifier: ^3.9.6
@@ -253,10 +253,10 @@ importers:
         specifier: npm:@typescript/typescript6@^6.0.2
         version: '@typescript/typescript6@6.0.2'
       typescript-eslint:
-        specifier: ^8.66.0
+        specifier: ^8.67.0
         version: 8.67.0(@typescript/typescript6@6.0.2)(eslint@10.8.1(supports-color@10.2.2))(supports-color@10.2.2)
       vite:
-        specifier: ^8.2.0
+        specifier: ^8.2.1
         version: 8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(yaml@2.9.0)
       vite-plugin-dts:
         specifier: ^5.0.3
@@ -283,10 +283,10 @@ importers:
         specifier: ^0.0.45
         version: 0.0.45
       ag-grid-community:
-        specifier: ^36.0.2
+        specifier: ^36.1.0
         version: 36.1.0
       ag-grid-react:
-        specifier: ^36.0.2
+        specifier: ^36.1.0
         version: 36.1.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       arquero:
         specifier: ^8.0.3
@@ -304,7 +304,7 @@ importers:
         specifier: ^0.1.1
         version: 0.1.1
       immer:
-        specifier: ^11.1.15
+        specifier: ^11.1.16
         version: 11.1.16
       json5:
         specifier: ^2.2.3
@@ -392,7 +392,7 @@ importers:
         specifier: ^10.7.0
         version: 10.8.1(supports-color@10.2.2)
       eventsource:
-        specifier: ^4.1.0
+        specifier: ^4.1.1
         version: 4.1.1
       jsdom:
         specifier: ^30.0.1
@@ -422,10 +422,10 @@ importers:
         specifier: npm:@typescript/typescript6@^6.0.2
         version: '@typescript/typescript6@6.0.2'
       typescript-eslint:
-        specifier: ^8.66.0
+        specifier: ^8.67.0
         version: 8.67.0(@typescript/typescript6@6.0.2)(eslint@10.8.1(supports-color@10.2.2))(supports-color@10.2.2)
       vite:
-        specifier: ^8.2.0
+        specifier: ^8.2.1
         version: 8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(yaml@2.9.0)
       vite-plugin-dts:
         specifier: ^5.0.3
@@ -462,7 +462,7 @@ importers:
         specifier: npm:@typescript/typescript6@^6.0.2
         version: '@typescript/typescript6@6.0.2'
       typescript-eslint:
-        specifier: ^8.66.0
+        specifier: ^8.67.0
         version: 8.67.0(@typescript/typescript6@6.0.2)(eslint@10.8.1(supports-color@10.2.2))(supports-color@10.2.2)
       vitest:
         specifier: ^4.1.10
@@ -502,7 +502,7 @@ importers:
         specifier: ^1.0.5
         version: 1.0.5
       '@types/node':
-        specifier: ^26.1.2
+        specifier: ^26.2.0
         version: 26.2.0
       '@types/react':
         specifier: ^19.2.18
@@ -538,7 +538,7 @@ importers:
         specifier: npm:@typescript/typescript6@^6.0.2
         version: '@typescript/typescript6@6.0.2'
       typescript-eslint:
-        specifier: ^8.66.0
+        specifier: ^8.67.0
         version: 8.67.0(@typescript/typescript6@6.0.2)(eslint@10.8.1(supports-color@10.2.2))(supports-color@10.2.2)
       vitest:
         specifier: ^4.1.10
@@ -578,10 +578,10 @@ importers:
         version: 2.3.0(@popperjs/core@2.11.8)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
     devDependencies:
       '@storybook/react':
-        specifier: ^10.5.6
+        specifier: ^10.5.7
         version: 10.5.7(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(@typescript/typescript6@6.0.2)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(storybook@10.5.7(@types/react@19.2.18)(prettier@3.9.6)(react@19.2.8))(supports-color@10.2.2)
       '@storybook/react-vite':
-        specifier: ^10.5.6
+        specifier: ^10.5.7
         version: 10.5.7(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(@typescript/typescript6@6.0.2)(esbuild@0.28.2)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(storybook@10.5.7(@types/react@19.2.18)(prettier@3.9.6)(react@19.2.8))(supports-color@10.2.2)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(yaml@2.9.0))
       '@tanstack/react-query':
         specifier: ^5.101.4
@@ -644,13 +644,13 @@ importers:
         specifier: ^8.3.0
         version: 8.3.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       storybook:
-        specifier: ^10.5.6
+        specifier: ^10.5.7
         version: 10.5.7(@types/react@19.2.18)(prettier@3.9.6)(react@19.2.8)
       typescript:
         specifier: npm:@typescript/typescript6@^6.0.2
         version: '@typescript/typescript6@6.0.2'
       typescript-eslint:
-        specifier: ^8.66.0
+        specifier: ^8.67.0
         version: 8.67.0(@typescript/typescript6@6.0.2)(eslint@10.8.1(supports-color@10.2.2))(supports-color@10.2.2)
       vitest:
         specifier: ^4.1.10
@@ -723,7 +723,7 @@ importers:
         specifier: npm:@typescript/typescript6@^6.0.2
         version: '@typescript/typescript6@6.0.2'
       typescript-eslint:
-        specifier: ^8.66.0
+        specifier: ^8.67.0
         version: 8.67.0(@typescript/typescript6@6.0.2)(eslint@10.8.1(supports-color@10.2.2))(supports-color@10.2.2)
       vitest:
         specifier: ^4.1.10
@@ -747,7 +747,7 @@ importers:
         specifier: npm:@typescript/typescript6@^6.0.2
         version: '@typescript/typescript6@6.0.2'
       typescript-eslint:
-        specifier: ^8.66.0
+        specifier: ^8.67.0
         version: 8.67.0(@typescript/typescript6@6.0.2)(eslint@10.8.1(supports-color@10.2.2))(supports-color@10.2.2)
       vitest:
         specifier: ^4.1.10
@@ -774,7 +774,7 @@ importers:
         specifier: ^8.0.3
         version: 8.0.3
       esbuild:
-        specifier: ^0.28.1
+        specifier: ^0.28.2
         version: 0.28.2
       eslint:
         specifier: ^10.7.0
@@ -792,7 +792,7 @@ importers:
         specifier: npm:@typescript/typescript6@^6.0.2
         version: '@typescript/typescript6@6.0.2'
       typescript-eslint:
-        specifier: ^8.66.0
+        specifier: ^8.67.0
         version: 8.67.0(@typescript/typescript6@6.0.2)(eslint@10.8.1(supports-color@10.2.2))(supports-color@10.2.2)
       vitest:
         specifier: ^4.1.10
@@ -837,7 +837,7 @@ importers:
         specifier: npm:@typescript/typescript6@^6.0.2
         version: '@typescript/typescript6@6.0.2'
       typescript-eslint:
-        specifier: ^8.66.0
+        specifier: ^8.67.0
         version: 8.67.0(@typescript/typescript6@6.0.2)(eslint@10.8.1(supports-color@10.2.2))(supports-color@10.2.2)
       vitest:
         specifier: ^4.1.10
@@ -870,10 +870,10 @@ importers:
         specifier: ^7.1.1
         version: 7.1.1(eslint@10.8.1(supports-color@10.2.2))(supports-color@10.2.2)
       eslint-plugin-react-refresh:
-        specifier: ^0.5.3
+        specifier: ^0.5.4
         version: 0.5.4(eslint@10.8.1(supports-color@10.2.2))
       typescript-eslint:
-        specifier: ^8.66.0
+        specifier: ^8.67.0
         version: 8.67.0(@typescript/typescript6@6.0.2)(eslint@10.8.1(supports-color@10.2.2))(supports-color@10.2.2)
     devDependencies:
       eslint:
@@ -1933,7 +1933,7 @@ packages:
   '@storybook/csf-plugin@10.5.7':
     resolution: {integrity: sha512-IaX8FlM0H36HNFhJ2+4L9bCldqfvHGqcLg841SJNyK/DhfMlM7JsvY/GDH2ZFuWrUf8FSOx96GRRnHq6XfRKag==}
     peerDependencies:
-      esbuild: ^0.28.1
+      esbuild: ^0.28.2
       rollup: ^4.59.0
       storybook: ^10.5.7
       vite: '*'
@@ -4530,7 +4530,7 @@ packages:
       '@microsoft/api-extractor': ^7.57.6
       '@rspack/core': ^1
       '@vue/language-core': ^3.1.5
-      esbuild: ^0.28.1
+      esbuild: ^0.28.2
       rolldown: '*'
       rollup: ^4.59.0
       typescript: '>=4'
@@ -4606,7 +4606,7 @@ packages:
     peerDependencies:
       '@types/node': ^20.19.0 || >=22.12.0
       '@vitejs/devtools': ^0.4.0
-      esbuild: ^0.28.1
+      esbuild: ^0.28.2
       jiti: '>=1.21.0'
       less: ^4.0.0
       sass: ^1.70.0
