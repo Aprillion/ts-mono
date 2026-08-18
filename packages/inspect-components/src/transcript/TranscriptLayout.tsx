@@ -708,6 +708,7 @@ export const TranscriptLayout: FC<TranscriptLayoutProps> = ({
                   isCollapsed={isOutlineCollapsed}
                   hasNodes={outlineHasNodes}
                   onHasNodesChange={onOutlineHasNodesChange}
+                  listId={listId}
                   eventNodes={eventNodes}
                   defaultCollapsedIds={defaultCollapsedIds}
                   scrollRef={scrollRef}

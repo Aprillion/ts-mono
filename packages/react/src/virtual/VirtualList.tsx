@@ -49,10 +49,15 @@ function PaddingChunks({ height, prefix }: { height: number; prefix: string }) {
 export function VirtualList<T>({
   persistenceKey,
   ref,
+  id,
   className,
-  scrollRef: externalScrollRef,
+  scrollRef: externalScroll,
   data,
   renderRow,
+  estimatedItemHeight = DEFAULT_ITEM_HEIGHT_PX,
+  overscan,
+  embedded = false,
+  resetScrollOnMount: resetScrollOnMountProp,
   live,
   navOwned,
   followRequested,
@@ -64,38 +69,105 @@ export function VirtualList<T>({
   scrollToTopOnFinish = false,
   onVisibleRangeChange,
 }: VirtualListProps<T> & { ref?: Ref<VirtualListHandle> }) {
-  // Resolve externalScrollRef into state so TanStack gets a non-null
-  // scroll element even when the ref target mounts after us. Without
+  // An embedded list shares a container whose position the host owns;
+  // resetting it on mount would yank the host's scroller.
+  const resetScrollOnMount = resetScrollOnMountProp ?? !embedded;
+
+  // Resolve the external scroll target into state so TanStack gets a non-null
+  // scroll element even when a ref's target mounts after us. Without
   // this, the first trackpad swipe goes to the wrong scroll ancestor.
+  const externalScrollRef =
+    externalScroll instanceof HTMLElement ? null : (externalScroll ?? null);
+  const externalScrollEl =
+    externalScroll instanceof HTMLElement ? externalScroll : null;
   const internalScrollRef = useRef<HTMLDivElement | null>(null);
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
   const [scrollParent, setScrollParent] = useState<HTMLElement | null>(null);
+
+  // Offset of the list within an external scroll parent. Content can sit
+  // above an embedded list in a shared scroller, so item coordinates must be
+  // shifted by this margin (TanStack's scrollMargin) to line up with the
+  // container's scrollTop — Virtuoso derived this from customScrollParent
+  // automatically. Only measured for `embedded` lists; hosts with their own
+  // chrome compensation keep margin 0.
+  const [scrollMargin, setScrollMargin] = useState(0);
+  const measureScrollMargin = useCallback(() => {
+    const wrapper = wrapperRef.current;
+    const parent = embedded ? (externalScrollEl ?? scrollParent) : null;
+    let margin = 0;
+    // parent === wrapper: an `embedded` list that owns its scroller (no
+    // external scroll target) — measuring the wrapper against itself would
+    // degenerate the margin to scrollTop and feed scroll position back into
+    // item coordinates. There is no content above the list inside its own
+    // scroller, so the margin is 0 by construction.
+    if (wrapper && parent && parent !== wrapper) {
+      const parentRect = parent.getBoundingClientRect();
+      // A zero-size parent rect means "not laid out" (display:none, or a
+      // rect-less test DOM) — rect math would degenerate to scrollTop.
+      if (parentRect.width > 0 || parentRect.height > 0) {
+        margin = Math.max(
+          0,
+          Math.round(
+            wrapper.getBoundingClientRect().top -
+              parentRect.top +
+              parent.scrollTop
+          )
+        );
+      }
+    }
+    setScrollMargin((prev) => (prev === margin ? prev : margin));
+  }, [embedded, externalScrollEl, scrollParent]);
+  // Re-measured on every commit. Out-of-band shifts (content above changing
+  // without this list re-rendering) are only partially covered: the
+  // MutationObserver below exists only for ref-based hosts and fires on
+  // childList changes (e.g. a sibling list adding rows), not on pure
+  // size/attribute changes. A stale margin self-corrects on the next commit —
+  // any scroll of the container re-renders the list via the virtualizer and
+  // re-measures here.
+  useLayoutEffect(measureScrollMargin);
+
+  // A concrete element needs no resolution: getScrollElement consults it
+  // directly (the host re-renders us when it changes), so only a ref target
+  // gets the observer below.
   useEffect(() => {
-    if (!externalScrollRef) return;
-    const sync = () => {
+    if (externalScrollRef === null) return;
+    const sync = (records?: MutationRecord[]) => {
       setScrollParent((prev) =>
         prev === externalScrollRef.current
           ? prev
           : (externalScrollRef.current ?? null)
       );
+      // The list's own row churn can't move the wrapper within its container;
+      // skip the forced-layout measure for own-subtree mutation batches.
+      const wrapper = wrapperRef.current;
+      if (
+        records &&
+        wrapper &&
+        records.every((r) => wrapper.contains(r.target))
+      )
+        return;
+      measureScrollMargin();
     };
     sync();
     const observer = new MutationObserver(sync);
     observer.observe(document.body, { childList: true, subtree: true });
     return () => observer.disconnect();
-  }, [externalScrollRef]);
+  }, [externalScrollRef, measureScrollMargin]);
   const getScrollElement = useCallback(
-    () => scrollParent ?? internalScrollRef.current,
-    [scrollParent]
+    () => externalScrollEl ?? scrollParent ?? internalScrollRef.current,
+    [externalScrollEl, scrollParent]
   );
 
   const { virtualizer, scale, toContentScroll, toSpacerScroll } =
     useScaledVirtualizer({
       count: data.length,
-      estimateSize: () => DEFAULT_ITEM_HEIGHT_PX,
+      estimateSize: () => estimatedItemHeight,
       getScrollElement,
+      overscan,
       // A stable virtualizer option rather than a post-scroll `scrollTop +=`,
       // so tanstack's reconcile re-applies it instead of erasing it on far jumps.
       scrollPaddingStart: scrollPaddingStart ?? 0,
+      scrollMargin,
     });
 
   const { getRestoreSnapshot, recordSnapshot } =
@@ -412,6 +484,77 @@ export function VirtualList<T>({
     []
   );
   const lastInitialKeyRef = useRef<string | null>(null);
+  // Restore a persisted pixel offset by RE-FORCING it until the virtualizer's
+  // re-measure compensation goes quiet. A one-shot write races the remount
+  // measurement pass: every row measured after the write that sits entirely
+  // above the fold shifts scrollTop by its estimate error (see
+  // shouldAdjustScrollPositionOnItemSizeChange), and which rows land after
+  // the write depends on re-render timing — virtual-core 3.17.7 moved that
+  // timing (notify(adjustedSync) -> flushSync) and drifted the restore by a
+  // full row (#519). Re-forcing until quiet makes the landing independent of
+  // when re-renders happen; it also absorbs the browser clamping an early
+  // write against a not-yet-grown (estimate-sized) scrollHeight. The target
+  // is a callback so per-frame writes see fresh clamp bounds — and, via the
+  // ref-backed converters, a fresh scale — as totals grow.
+  const settleRestoreScroll = useCallback(
+    (getTargetSpacerTop: () => number) => {
+      // Guard bookkeeping mirrors settleScrollToIndex: every exit path —
+      // including a missing scroll element — must book the guard release, or
+      // the caller-taken auto-scroll guard leaks and persistence stays
+      // silently dead for the rest of the mount.
+      isAutoScrollingRef.current = true;
+      cancelAnimationFrame(releaseFrameRef.current);
+      cancelAnimationFrame(settleFrameRef.current);
+      const el = getScrollElement();
+      const keyAtStart = lastInitialKeyRef.current;
+      const finish = () => {
+        if (el) lastAutoScrollTopRef.current = el.scrollTop;
+        releaseFrameRef.current = requestAnimationFrame(() => {
+          isAutoScrollingRef.current = false;
+        });
+      };
+      if (!el) {
+        finish();
+        return;
+      }
+      el.scrollTop = getTargetSpacerTop();
+      let frames = 0;
+      let stable = 0;
+      let lastTop = el.scrollTop;
+      const settle = () => {
+        // A key change mid-settle means this restore belongs to the previous
+        // sample — stop before writing its offset into the new one's list.
+        // User input always wins over a pending restore.
+        if (
+          userInteractingRef.current ||
+          lastInitialKeyRef.current !== keyAtStart
+        ) {
+          finish();
+          return;
+        }
+        // Read BEFORE re-forcing: the drift being waited out (re-measure
+        // compensation nudging scrollTop after our write) happens between
+        // frames, and forcing first would hide it from the stability check.
+        const preTop = el.scrollTop;
+        el.scrollTop = getTargetSpacerTop();
+        const postTop = el.scrollTop;
+        // Any movement since last frame — external compensation (preTop) or
+        // our own re-force landing somewhere new (clamp released as content
+        // grew, postTop) — means the layout is still moving.
+        const moved =
+          Math.abs(preTop - lastTop) > 1 || Math.abs(postTop - lastTop) > 1;
+        stable = moved ? 0 : stable + 1;
+        lastTop = postTop;
+        if (stable < 3 && ++frames < 30) {
+          settleFrameRef.current = requestAnimationFrame(settle);
+        } else {
+          finish();
+        }
+      };
+      settleFrameRef.current = requestAnimationFrame(settle);
+    },
+    [getScrollElement]
+  );
   const lastInitialIndexRef = useRef<number | undefined>(undefined);
   // The no-snapshot "reset to top" is a one-shot per (re)key: re-firing on
   // every measurement would keep slamming scrollTop to 0 against an
@@ -463,18 +606,32 @@ export function VirtualList<T>({
         // wheel); a foreign scrollTop from a shared container doesn't block it.
         hasInitialScrolledRef.current = true;
         if (!userScrolledRef.current) {
-          const maxScroll = Math.max(
-            0,
-            virtualizer.getTotalSize() - el.clientHeight
-          );
-          const offset =
-            snapshot.totalCount === data.length
-              ? snapshot.scrollOffset
-              : Math.min(snapshot.scrollOffset, maxScroll);
-          el.scrollTop = toSpacerScroll(offset);
+          // settleRestoreScroll releases the auto-scroll guard itself.
+          // Whether to clamp is decided once at restore time (one-shot
+          // semantics); only the clamp BOUNDS are re-read per frame.
+          const clampToMax = snapshot.totalCount !== data.length;
+          settleRestoreScroll(() => {
+            const target = toSpacerScroll(snapshot.scrollOffset);
+            if (!clampToMax) return target;
+            // Clamped fully in spacer space (dividing by the positive scale
+            // distributes over min/max, so this equals the content-space clamp).
+            // scrollMargin is unscaled DOM above the list, so it adds after.
+            const maxSpacerTop = Math.max(
+              0,
+              toSpacerScroll(virtualizer.getTotalSize()) +
+                scrollMargin -
+                el.clientHeight
+            );
+            return Math.min(target, maxSpacerTop);
+          });
+        } else {
+          release();
         }
-        release();
-      } else if (!userScrolledRef.current && !hasResetTopRef.current) {
+      } else if (
+        !userScrolledRef.current &&
+        !hasResetTopRef.current &&
+        resetScrollOnMount
+      ) {
         // No snapshot: reset to top once WITHOUT committing the one-shot
         // guard (a snapshot may rehydrate later), but flag the reset so
         // re-fires don't keep forcing 0 against a deep-link scroll.
@@ -499,6 +656,7 @@ export function VirtualList<T>({
     persistenceKey,
     initialIndex,
     settleScrollToIndex,
+    settleRestoreScroll,
     contentTotal,
     data.length,
     followOutput,
@@ -507,6 +665,8 @@ export function VirtualList<T>({
     getScrollElement,
     toSpacerScroll,
     virtualizer,
+    scrollMargin,
+    resetScrollOnMount,
   ]);
 
   const buildSnapshot = useCallback(
@@ -654,26 +814,37 @@ export function VirtualList<T>({
 
   const ItemSlot = components?.Item;
   const FooterSlot = components?.Footer;
-  const ownsScroll = !externalScrollRef;
+  const ownsScroll = externalScroll === undefined;
 
   // Padding divs are in SPACER space (divided by scale) so no element exceeds
   // the browser's max height cap; the rendered band stays in content space.
+  // Item coordinates include scrollMargin (they're in scroll-element space);
+  // the DOM content above the list already occupies that span, so it is
+  // subtracted from the list's own padding. getTotalSize() excludes it.
   const firstItem = items.length > 0 ? items[0] : undefined;
   const lastItem = items.length > 0 ? items[items.length - 1] : undefined;
-  const topPaddingContent = firstItem?.start ?? 0;
+  const bandStart = firstItem?.start ?? 0;
+  const topPaddingContent = firstItem ? firstItem.start - scrollMargin : 0;
   const topPaddingSpacer = topPaddingContent / scale;
   const renderedBandHeight =
     firstItem && lastItem
       ? lastItem.start + lastItem.size - firstItem.start
       : 0;
   const bottomPaddingContent = lastItem
-    ? Math.max(0, virtualizer.getTotalSize() - (lastItem.start + lastItem.size))
+    ? Math.max(
+        0,
+        virtualizer.getTotalSize() +
+          scrollMargin -
+          (lastItem.start + lastItem.size)
+      )
     : virtualizer.getTotalSize();
   const bottomPaddingSpacer = bottomPaddingContent / scale;
 
   return (
     <div
+      id={id}
       ref={(el) => {
+        wrapperRef.current = el;
         if (!ownsScroll) return;
         internalScrollRef.current = el;
         // Push the mounted element into state so getScrollElement gets a
@@ -693,7 +864,7 @@ export function VirtualList<T>({
         {items.map((vItem) => {
           const item = data[vItem.index];
           if (item === undefined) return null;
-          const top = vItem.start - topPaddingContent;
+          const top = vItem.start - bandStart;
           const child = renderRow(vItem.index, item);
           if (ItemSlot) {
             return (
