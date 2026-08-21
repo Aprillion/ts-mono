@@ -420,7 +420,6 @@ export const ScannerResultsList: FC<ScannerResultsListProps> = ({
           ref={listHandle}
           data={rows}
           renderRow={renderRow}
-          className={clsx(styles.list)}
           smoothScroll={false}
         />
       )}
