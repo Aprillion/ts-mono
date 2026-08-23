@@ -139,6 +139,7 @@ export interface SampleSummary {
   scores: EvalSampleScore | null | undefined;
   error?: string;
   limit?: string;
+  limit_reason?: string;
   metadata?: Record<string, unknown>;
   completed?: boolean;
   retries?: number;
