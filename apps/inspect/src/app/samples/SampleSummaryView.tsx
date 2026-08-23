@@ -94,12 +94,13 @@ const resolveSample = (
     sample && sampleDescriptor
       ? sampleDescriptor.selectedScorerDescriptor(sample)?.answer()
       : undefined;
-  const limit = isEvalSample(sample) ? sample.limit?.type : undefined;
-  // resolved off the same branch as `limit` above — a SampleSummary yields no
-  // limit here, so a reason read from one could never render
+  // the sole caller passes a SampleSummary (useSelectedSampleSummary), so the
+  // summary branch is the one that renders — reading only the EvalSample side
+  // left the whole limit item dead
+  const limit = isEvalSample(sample) ? sample.limit?.type : sample.limit;
   const limit_reason = isEvalSample(sample)
     ? (sample.limit?.reason ?? undefined)
-    : undefined;
+    : sample.limit_reason;
   const working_time = isEvalSample(sample) ? sample.working_time : undefined;
   const total_time = isEvalSample(sample) ? sample.total_time : undefined;
   const cancelled = isCancelled(sample);
