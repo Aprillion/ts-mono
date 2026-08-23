@@ -20,7 +20,8 @@ interface ChangeType {
   match?: (changes: JsonChange[]) => boolean;
   render: (
     changes: JsonChange[],
-    state: Record<string, unknown>
+    state: Record<string, unknown>,
+    eventNodeId: string
   ) => JSX.Element;
 }
 
@@ -113,7 +114,7 @@ const human_baseline_session: ChangeType = {
     replace: [],
     remove: [],
   },
-  render: (_changes, state: Record<string, unknown>) => {
+  render: (_changes, state: Record<string, unknown>, eventNodeId) => {
     // Read the session values
     const started = state[humanAgentKey("started_running")] as number;
     const runtime = state[humanAgentKey("accumulated_time")] as number;
@@ -127,6 +128,7 @@ const human_baseline_session: ChangeType = {
 
     // Collect raw parts keyed by timestamp, then keep only entries with required fields
     const partial = new Map<string, Partial<SessionLog>>();
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
     if (rawSessions) {
       for (const key of Object.keys(rawSessions)) {
         const value = rawSessions[key] as string;
@@ -161,6 +163,7 @@ const human_baseline_session: ChangeType = {
     return (
       <HumanBaselineView
         key="human_baseline_view"
+        id={eventNodeId}
         started={startedDate}
         running={running}
         completed={completed}
@@ -213,6 +216,7 @@ const renderTools = (
 
   // Show either all tools or just the specific tools
   const tools = resolvedState.tools as [];
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
   if (tools.length > 0) {
     if (toolIndexes.length === 0) {
       toolsInfo["Tools"] = (

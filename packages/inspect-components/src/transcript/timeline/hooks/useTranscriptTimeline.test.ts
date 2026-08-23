@@ -1,12 +1,21 @@
-// @vitest-environment jsdom
 import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
+import {
+  testAnchorEvent,
+  testAssistantMessage,
+  testChatCompletionChoice,
+  testModelEvent,
+  testModelOutput,
+  testModelUsage,
+  testSpanBeginEvent,
+  testSpanEndEvent,
+  testTimelineEvent,
+  testTimelineSpan,
+} from "@tsmono/inspect-common/testing";
 import type {
   Event,
   Timeline as ServerTimeline,
-  TimelineEvent as ServerTimelineEvent,
-  TimelineSpan as ServerTimelineSpan,
 } from "@tsmono/inspect-common/types";
 
 import { useTranscriptTimeline } from "./useTranscriptTimeline";
@@ -16,40 +25,32 @@ import { useTranscriptTimeline } from "./useTranscriptTimeline";
 // =============================================================================
 
 function makeModelEvent(uuid: string, startSec: number, endSec: number): Event {
-  return {
-    event: "model",
+  return testModelEvent({
     uuid,
-    model: "test-model",
-    input: [],
-    output: {
+    output: testModelOutput({
       choices: [
-        {
-          message: {
-            role: "assistant",
+        testChatCompletionChoice({
+          message: testAssistantMessage({
             content: "response",
             source: "generate",
-          },
+          }),
           stop_reason: "stop",
-        },
+        }),
       ],
       completion: "response",
-      model: "test-model",
-      usage: {
+      usage: testModelUsage({
         input_tokens: 60,
         output_tokens: 40,
         total_tokens: 100,
-      },
+      }),
       time: endSec - startSec,
-    },
-    config: {},
-    tools: [],
-    tool_choice: "auto",
+    }),
     timestamp: new Date(1705312800000 + startSec * 1000).toISOString(),
     working_start: startSec,
     working_time: endSec - startSec,
     error: null,
     traceback_ansi: null,
-  } as unknown as Event;
+  });
 }
 
 function spanBegin(
@@ -58,54 +59,28 @@ function spanBegin(
   type: string | null,
   parentId: string | null
 ): Event {
-  return {
-    event: "span_begin",
+  return testSpanBeginEvent({
     id,
     name,
     type,
     parent_id: parentId,
     span_id: null,
     timestamp: new Date(1705312800000).toISOString(),
-    working_start: 0,
     pending: null,
     uuid: null,
     metadata: null,
-  } as unknown as Event;
+  });
 }
 
 function spanEnd(id: string): Event {
-  return {
-    event: "span_end",
+  return testSpanEndEvent({
     id,
     span_id: null,
     timestamp: new Date(1705312800000).toISOString(),
-    working_start: 0,
     pending: null,
     uuid: null,
     metadata: null,
-  } as unknown as Event;
-}
-
-function makeServerEvent(uuid: string): ServerTimelineEvent {
-  return { type: "event", event: uuid };
-}
-
-function makeServerSpan(
-  overrides: Partial<ServerTimelineSpan> & { id: string; name: string }
-): ServerTimelineSpan {
-  return {
-    type: "span",
-    span_type: null,
-    content: [],
-    branches: [],
-    branched_from: null,
-    description: null,
-    utility: false,
-    tool_invoked: false,
-    agent_result: null,
-    outline: null,
-    ...overrides,
-  };
+  });
 }
 
 // =============================================================================
@@ -122,22 +97,22 @@ describe("useTranscriptTimeline", () => {
   const serverTimeline: ServerTimeline = {
     name: "default",
     description: "Test timeline",
-    root: makeServerSpan({
+    root: testTimelineSpan({
       id: "root",
       name: "Transcript",
       content: [
-        makeServerEvent("evt-1"),
-        makeServerSpan({
+        testTimelineEvent({ event: "evt-1" }),
+        testTimelineSpan({
           id: "agent-a",
           name: "Agent A",
           span_type: "agent",
-          content: [makeServerEvent("evt-2")],
+          content: [testTimelineEvent({ event: "evt-2" })],
         }),
-        makeServerSpan({
+        testTimelineSpan({
           id: "agent-b",
           name: "Agent B",
           span_type: "agent",
-          content: [makeServerEvent("evt-3")],
+          content: [testTimelineEvent({ event: "evt-3" })],
         }),
       ],
     }),
@@ -300,17 +275,12 @@ function makeAnchorEvent(
   anchorId: string,
   startSec: number
 ): Event {
-  return {
-    event: "anchor",
+  return testAnchorEvent({
     uuid,
     anchor_id: anchorId,
     timestamp: new Date(1705312800000 + startSec * 1000).toISOString(),
     working_start: startSec,
-    span_id: null,
-    pending: null,
-    metadata: null,
-    source: null,
-  } as unknown as Event;
+  });
 }
 
 describe("useTranscriptTimeline punch-down views", () => {
@@ -322,17 +292,20 @@ describe("useTranscriptTimeline punch-down views", () => {
   const branchTimeline: ServerTimeline = {
     name: "default",
     description: "Branch timeline",
-    root: makeServerSpan({
+    root: testTimelineSpan({
       id: "root",
       name: "Transcript",
-      content: [makeServerEvent("evt-1"), makeServerEvent("evt-anchor")],
+      content: [
+        testTimelineEvent({ event: "evt-1" }),
+        testTimelineEvent({ event: "evt-anchor" }),
+      ],
       branches: [
-        makeServerSpan({
+        testTimelineSpan({
           id: "branch-1",
           name: "branch",
           span_type: "branch",
           branched_from: "fork-1",
-          content: [makeServerEvent("evt-branch")],
+          content: [testTimelineEvent({ event: "evt-branch" })],
         }),
       ],
     }),
@@ -395,17 +368,17 @@ describe("useTranscriptTimeline orphaned selection", () => {
   const utilityTimeline: ServerTimeline = {
     name: "default",
     description: "Utility lane test",
-    root: makeServerSpan({
+    root: testTimelineSpan({
       id: "root",
       name: "Transcript",
       content: [
-        makeServerEvent("evt-main"),
-        makeServerSpan({
+        testTimelineEvent({ event: "evt-main" }),
+        testTimelineSpan({
           id: "util-a",
           name: "Utility A",
           span_type: "agent",
           utility: true,
-          content: [makeServerEvent("evt-util")],
+          content: [testTimelineEvent({ event: "evt-util" })],
         }),
       ],
     }),

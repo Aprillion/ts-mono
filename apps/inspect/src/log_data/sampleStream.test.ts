@@ -3,13 +3,14 @@
    assertions reach into their dynamically-shaped fields. */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ClientAPI, SampleData, SampleDataResponse } from "../client/api/types";
+import { SampleData, SampleDataResponse } from "../client/api/types";
 
 import {
   createSampleStreamSession,
   hasSampleDataUpdates,
   shouldFinalizeStreamingSample,
 } from "./sampleStream";
+import { testClientAPI } from "./testFixtures";
 
 const emptySampleData: SampleData = {
   events: [],
@@ -73,7 +74,7 @@ const mockApi = {
   get_log_sample_data: vi.fn(),
   log_message: vi.fn(),
 };
-const api = mockApi as unknown as ClientAPI;
+const api = testClientAPI(mockApi);
 
 const makeSession = () =>
   createSampleStreamSession(api, "log.eval", "sample-1", 1);
@@ -179,6 +180,29 @@ describe("createSampleStreamSession", () => {
       "third",
     ]);
     expect(second.events).not.toBe(first.events);
+  });
+
+  it("normalizes streamed events missing type-required fields (#555)", async () => {
+    // A skewed (older) live server can stream events of an older schema —
+    // e.g. a model event with no working_start/config/output. These render
+    // through the transcript components' now-unguarded reads.
+    mockApi.get_log_sample_data.mockResolvedValueOnce(
+      okResponse({
+        events: [
+          eventData(1, "e1", { event: "model", timestamp: "t", model: "m" }),
+        ],
+      })
+    );
+
+    const session = makeSession();
+    const result = await session.tick(false);
+    expect(result.events[0]).toMatchObject({
+      event: "model",
+      working_start: 0,
+      config: {},
+      output: { model: "", choices: [], completion: "" },
+      tool_choice: "none",
+    });
   });
 
   it("advances cursors across ticks", async () => {

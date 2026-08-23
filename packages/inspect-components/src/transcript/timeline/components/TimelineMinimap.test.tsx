@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -38,13 +37,13 @@ describe("TimelineMinimap", () => {
     // the hidden class).
     const time = getByText("time");
     const tokens = getByText("tokens");
-    expect(time.className).not.toContain(styles.hidden!);
-    expect(tokens.className).toContain(styles.hidden!);
+    expect(time.className).not.toContain(styles.hidden);
+    expect(tokens.className).toContain(styles.hidden);
 
     fireEvent.click(time);
 
-    expect(getByText("time").className).toContain(styles.hidden!);
-    expect(getByText("tokens").className).not.toContain(styles.hidden!);
+    expect(getByText("time").className).toContain(styles.hidden);
+    expect(getByText("tokens").className).not.toContain(styles.hidden);
   });
 
   it("emits the pointer position as a 0-1 scrub fraction", () => {

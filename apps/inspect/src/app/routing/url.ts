@@ -1,5 +1,7 @@
 import { useCallback, useMemo } from "react";
-import { useLocation, useParams } from "react-router-dom";
+import { useLocation, useParams } from "react-router";
+
+import { directoryRelativeUrl, encodePathParts } from "@tsmono/util";
 
 import { useLogDir } from "../../app_config";
 import {
@@ -10,7 +12,6 @@ import {
   kWorkspaceTabs,
 } from "../../constants";
 import { useStore } from "../../state/store";
-import { directoryRelativeUrl, encodePathParts } from "../../utils/uri";
 
 /**
  * Decodes a URL parameter that may be URL-encoded.

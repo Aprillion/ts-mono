@@ -21,7 +21,7 @@ export const ScannerResultNav: FC = () => {
     >
       <span className="text-size-smallest">
         {result
-          ? printIdentifier(resultIdentifier(result), result?.label)
+          ? printIdentifier(resultIdentifier(result), result.label)
           : undefined}
       </span>
     </NextPreviousNav>
@@ -32,12 +32,9 @@ const printIdentifier = (
   identifier: IdentifierInfo,
   label?: string
 ): string => {
-  let val = "";
-  if (identifier.epoch) {
-    val = `${identifier.id} epoch ${identifier.epoch}`;
-  } else {
-    val = String(identifier.id);
-  }
+  let val = identifier.epoch
+    ? `${identifier.id} epoch ${identifier.epoch}`
+    : String(identifier.id);
 
   if (label && label.length > 0) {
     val += ` (${label})`;

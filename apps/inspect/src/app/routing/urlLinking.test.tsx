@@ -8,7 +8,7 @@
 // (which, when embedded — e.g. Hawk's /eval-set/<id> page — is not just "/").
 import { renderHook } from "@testing-library/react";
 import { ReactNode } from "react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { StoreState } from "../../state/store";
@@ -29,12 +29,15 @@ const mockStore = vi.hoisted(() => ({
 
 vi.mock("../../state/store", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../state/store")>();
+  const { testStoreState } = await import("../../state/testStore");
+  const base = testStoreState();
   return {
     ...actual,
     useStore: (selector: (s: StoreState) => unknown) =>
       selector({
-        logs: { selectedLogFile: mockStore.selectedLogFile },
-      } as unknown as StoreState),
+        ...base,
+        logs: { ...base.logs, selectedLogFile: mockStore.selectedLogFile },
+      }),
   };
 });
 

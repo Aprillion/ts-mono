@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { ComponentStateProvider } from "../state/ComponentStateContext";
+import { makeStateHooks } from "../test/component-state-hooks";
 
 import { ExpandablePanel } from "./ExpandablePanel";
 import { FindTargetProvider } from "./FindTargetContext";
@@ -37,9 +38,7 @@ vi.spyOn(window, "getComputedStyle").mockImplementation((el, pseudo) => {
     return new Proxy(style, {
       get(target, prop) {
         if (prop === "fontSize") return "16px";
-        const val = (target as unknown as Record<string, unknown>)[
-          prop as string
-        ];
+        const val: unknown = Reflect.get(target, prop);
         return typeof val === "function"
           ? (val as () => unknown).bind(target)
           : val;
@@ -57,27 +56,6 @@ Object.defineProperty(HTMLElement.prototype, "scrollHeight", {
     return 999;
   },
 });
-
-// --- Minimal ComponentStateHooks mock ---
-// useCollapsedState reads/writes collapsed state. For tests, a simple Map-backed
-// implementation is sufficient. Each test gets fresh state via the closure.
-function makeStateHooks() {
-  const store = new Map<string, unknown>();
-  const getKey = (id: string, prop: string) => `${id}::${prop}`;
-
-  return {
-    useValue: (id: string, prop: string) => store.get(getKey(id, prop)),
-    useSetValue: () => (id: string, prop: string, value: unknown) => {
-      store.set(getKey(id, prop), value);
-    },
-    useRemoveValue: () => (id: string, prop: string) => {
-      store.delete(getKey(id, prop));
-    },
-    useEntries: () => undefined,
-    useRemoveAll: () => () => {},
-    useRemoveByPrefix: () => () => {},
-  };
-}
 
 const Wrapper: React.FC<{
   findTarget: { term: string; eventId: string } | null;

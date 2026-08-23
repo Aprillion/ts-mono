@@ -257,8 +257,9 @@ export const ValidationSetSelector: FC<ValidationSetSelectorProps> = ({
       role="listbox"
     >
       {validationSets.map((uri) => (
-        <div
+        <button
           key={uri}
+          type="button"
           role="option"
           aria-selected={selectedUri === uri}
           className={`${styles.item} ${selectedUri === uri ? styles.selected : ""}`}
@@ -268,21 +269,22 @@ export const ValidationSetSelector: FC<ValidationSetSelectorProps> = ({
           <div className={styles.secondaryText}>
             {getDisplayPath(uri, appConfig) || (hasNonRootDir ? "\u00A0" : "")}
           </div>
-        </div>
+        </button>
       ))}
 
       {/* Create new set option */}
       {allowCreate && onCreate && (
         <>
           {validationSets.length > 0 && <div className={styles.divider} />}
-          <div
+          <button
+            type="button"
             role="option"
             aria-selected={false}
             className={`${styles.item} ${styles.createOption}`}
             onClick={() => handleSelect("__create_new__")}
           >
             <div className={styles.primaryText}>Create new set...</div>
-          </div>
+          </button>
         </>
       )}
     </div>
@@ -365,8 +367,9 @@ export const ValidationSetSelector: FC<ValidationSetSelectorProps> = ({
             const trimmedName = newSetName.trim();
             const extensionError = getExtensionError(trimmedName);
             const displayError = validationError || extensionError;
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- intentional: data isn't validated at the wire (#555); old files may omit type-required fields
             const displayDir = appConfig?.project_dir?.startsWith("file://")
-              ? appConfig?.project_dir.slice(7)
+              ? appConfig.project_dir.slice(7)
               : appConfig?.project_dir;
 
             // Show hint only if no error and we have a name and projectDir

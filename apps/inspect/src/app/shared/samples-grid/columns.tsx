@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unnecessary-condition */
 import clsx from "clsx";
 import type { CSSProperties } from "react";
 
@@ -39,7 +40,7 @@ import {
   resolveScale,
   type WireScoreColorScale,
 } from "./colorScale";
-import styles from "./SamplesGrid.module.css";
+import styles from "./gridCells.module.css";
 import { SampleRow } from "./types";
 
 export type SampleGridViewMode = "list" | "grid";
@@ -143,7 +144,7 @@ export function buildSampleColumns(
       maxSize: 80,
       enableSorting: false,
       enableResizing: false,
-      pinned: "left",
+      pinned: "start",
       accessorFn: (row) => row.displayIndex,
       cell: ({ row }) => {
         const value = row.original.displayIndex;

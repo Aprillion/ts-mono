@@ -26,6 +26,8 @@ export interface AutocompleteInputProps {
    *  with it (the placeholder is not a reliable accessible name). */
   ariaLabel?: string;
   suggestions: Array<string | number | boolean | null>;
+  /** Opt-in, and only correct when the input appears in response to a user
+   *  action (a popover or inline editor opening) — never on page load. */
   autoFocus?: boolean;
   maxSuggestions?: number;
   charactersBeforeSuggesting?: number;
@@ -274,10 +276,11 @@ export const AutocompleteInput: FC<AutocompleteInputProps> = ({
   // Scroll highlighted item into view
   useEffect(() => {
     if (listRef.current && showDropdown && highlightedIndex >= 0) {
-      const highlighted = listRef.current.children[
-        highlightedIndex
-      ] as HTMLElement;
-      highlighted?.scrollIntoView({ block: "nearest" });
+      // item() is honestly typed `Element | null`, covering an out-of-bounds
+      // index if the highlight/suggestions invariant ever breaks
+      listRef.current.children
+        .item(highlightedIndex)
+        ?.scrollIntoView({ block: "nearest" });
     }
   }, [highlightedIndex, showDropdown]);
 
@@ -311,6 +314,7 @@ export const AutocompleteInput: FC<AutocompleteInputProps> = ({
             ? `${id}-option-${highlightedIndex}`
             : undefined
         }
+        // eslint-disable-next-line jsx-a11y/no-autofocus -- see the prop docs
         autoFocus={autoFocus}
       />
       {allowBrowse && suggestions.length > 0 && (

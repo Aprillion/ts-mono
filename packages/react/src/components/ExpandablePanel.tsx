@@ -68,7 +68,7 @@ export const ExpandablePanel: FC<ExpandablePanelProps> = memo(
     // mount, assume our subtree contains it and render expanded immediately.
     // The post-render effect below will collapse us back if the term isn't
     // actually present. This swaps a "collapsed→expanded" flash on remount
-    // (which the user sees on every search step as Virtuoso re-renders) for
+    // (which the user sees on every search step as the virtual list re-renders) for
     // a much rarer "expanded→collapsed" flash on panels that don't match.
     const [containsFindTarget, setContainsFindTarget] = useState(
       () => findTarget !== null
@@ -89,6 +89,7 @@ export const ExpandablePanel: FC<ExpandablePanelProps> = memo(
         setContainsFindTarget(false);
         return;
       }
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
       const text = (root.textContent ?? "").toLowerCase();
       setContainsFindTarget(text.includes(findTarget.term.toLowerCase()));
     });
@@ -157,7 +158,6 @@ export const ExpandablePanel: FC<ExpandablePanelProps> = memo(
             ref={contentRef}
             style={contentStyles}
             className={clsx(
-              styles.expandableContentWrap,
               effectiveCollapsed && showToggle
                 ? styles.expandableTruncated
                 : undefined

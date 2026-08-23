@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unnecessary-condition */
 import clsx from "clsx";
 import {
   CSSProperties,
@@ -12,12 +13,12 @@ import {
   useRef,
   useState,
 } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 
 import { EvalSample, EvalSpec } from "@tsmono/inspect-common/types";
 import {
-  ChatViewVirtualList,
-  messagesToStr,
+  ChatViewRowsVirtualList,
+  type MessageRow,
 } from "@tsmono/inspect-components/chat";
 import {
   DisplayModeContext,
@@ -44,6 +45,8 @@ import {
   Card,
   CardBody,
   CardHeader,
+  ErrorPanel,
+  LoadingBar,
   NoContentsPanel,
   RailDock,
   StickyScroll,
@@ -61,9 +64,8 @@ import {
 import { isHostedEnvironment, isVscode } from "@tsmono/util";
 
 import { Events } from "../../@types/extraInspect";
-import { getApi, useLogDir } from "../../app_config";
+import { getApi } from "../../app_config";
 import { SampleSummary } from "../../client/api/types";
-import { ActivityBar } from "../../components/ActivityBar";
 import {
   kSampleErrorTabId,
   kSampleJsonTabId,
@@ -74,7 +76,11 @@ import {
   kSampleTranscriptTabId,
   kSampleUsageTabId,
 } from "../../constants";
-import { useChunkedMessages } from "../../log_data";
+import {
+  kDefaultMessageRowOptions,
+  useMessagesExport,
+  useSampleMessages,
+} from "../../log_data";
 import { setDocumentTitle } from "../../state/actions";
 import {
   useSelectedEvalSampleData,
@@ -94,10 +100,6 @@ import {
 } from "../routing/url";
 import { openInNewTab } from "../shared/openInNewTab";
 
-import {
-  messagesFromEvents,
-  type MessagesFromEventsState,
-} from "./messagesFromEvents";
 import styles from "./SampleDisplay.module.css";
 import { SampleJSONView } from "./SampleJSONView";
 import { SampleRetriedErrors } from "./SampleRetriedErrors";
@@ -122,6 +124,10 @@ interface SampleDisplayProps {
 }
 
 type ActivityRailItemId = "search" | "scans";
+
+// stable empty rows while the messages read is pending, so the list's
+// props don't churn per render
+const kNoMessageRows: MessageRow[] = [];
 
 /**
  * Component to display a sample with relevant context and visibility control.
@@ -197,27 +203,17 @@ export const SampleDisplay: FC<SampleDisplayProps> = ({
 
   const selectedSampleSummary = useSelectedSampleSummary();
 
-  // Consolidate the events and messages into the proper list
-  // whether running or not
+  // Consolidate the events into the proper list whether running or not
   const sampleEvents = sample?.events || runningSampleData;
-  // Cache messagesFromEvents work across polls. The polling pipeline
-  // only ever appends to the running events array (or replaces a tail
-  // event during streaming updates), so a pure-extension call only
-  // processes the new tail. Diverging events trigger a rebuild.
-  const messagesRef = useRef<MessagesFromEventsState | null>(null);
-  const sampleMessages = useMemo(() => {
-    /* eslint-disable react-hooks/refs */
-    if (sample?.messages) {
-      messagesRef.current = null;
-      return sample.messages;
-    } else if (runningSampleData) {
-      return messagesFromEvents(runningSampleData, messagesRef);
-    } else {
-      messagesRef.current = null;
-      return [];
-    }
-    /* eslint-enable react-hooks/refs */
-  }, [sample?.messages, runningSampleData]);
+
+  // Is the sample running?
+  const running = useMemo(() => {
+    return isRunning(
+      selectedSampleSummary,
+      runningSampleData,
+      sampleData.status
+    );
+  }, [selectedSampleSummary, runningSampleData, sampleData.status]);
 
   // Get all URL parameters at component level
   const {
@@ -238,23 +234,26 @@ export const SampleDisplay: FC<SampleDisplayProps> = ({
   // Use sampleTabId from parsed route if available, otherwise use the one from state
   const effectiveSelectedTab = sampleTabId || selectedTab;
 
-  // Chunked samples carry an empty shell `messages` array; the Messages tab
-  // hydrates the final conversation from message_refs instead — gated on the
-  // tab actually being open (full hydration can be ~135MB on compaction
-  // monsters; never pay it at sample open). Once hydrated it stays cached.
-  const logDir = useLogDir();
+  // The Messages tab's rows, assembled by the data layer. Which feed serves
+  // the conversation (monolith fetch, chunked hydration, live stream) is
+  // subsystem-private; the tab-open gate keeps chunked hydration from ever
+  // being paid at sample open.
   const selectedSampleHandle = useStore(
     (state) => state.log.selectedSampleHandle
   );
   const messagesTabOpen = effectiveSelectedTab === kSampleMessagesTabId;
-  const chunkedMessages = useChunkedMessages(
-    logDir,
-    isChunked && messagesTabOpen ? selectedSampleHandle : undefined,
-    sampleData.chunked
+  const sampleDetailNavigation = useSampleDetailNavigation();
+  const sampleMessages = useSampleMessages(
+    selectedSampleHandle,
+    sampleData,
+    messagesTabOpen,
+    running,
+    // `?message=` is also set by transcript-bound links (scan refs, transcript
+    // search hits), and the settled read stays activated once this tab has been
+    // opened — without the gate those ids would drain pages for a hidden tab.
+    messagesTabOpen ? sampleDetailNavigation.message : null
   );
-  const effectiveMessages = isChunked
-    ? (chunkedMessages.data ?? [])
-    : sampleMessages;
+  const exportMessages = useMessagesExport(sampleData);
 
   // Focus the panel when it loads
   useEffect(() => {
@@ -302,7 +301,13 @@ export const SampleDisplay: FC<SampleDisplayProps> = ({
     () => ({ enabled: isHostedEnvironment(), getMessageUrl }),
     [getMessageUrl]
   );
-  const chatTools = useMemo(() => ({ callStyle: "complete" as const }), []);
+  // Derived from the fold options: the rows arrive pre-folded and numbered
+  // by kDefaultMessageRowOptions, and render-side tool options must agree
+  // with them or block numbering and rendering diverge.
+  const chatTools = useMemo(
+    () => ({ callStyle: kDefaultMessageRowOptions.toolCallStyle }),
+    []
+  );
 
   const sampleUsages = usageViewsForSample(`${baseId}-${id}`, sample, evalSpec);
   const sampleMetadatas = metadataViewsForSample(
@@ -331,7 +336,9 @@ export const SampleDisplay: FC<SampleDisplayProps> = ({
   // Fall back to store state for single-file mode where URL doesn't contain sample ID/epoch
   const selectedLogFile = useStore((state) => state.logs.selectedLogFile);
   const printLogPath = urlLogPath || selectedLogFile;
+  // intentional ?. — persisted webview/store state isn't validated (#555); restored handles may omit type-required fields
   const printSampleId = urlSampleId || selectedSampleHandle?.id?.toString();
+  // intentional ?. — persisted webview/store state isn't validated (#555); restored handles may omit type-required fields
   const printEpoch = urlEpoch || selectedSampleHandle?.epoch?.toString();
 
   const handlePrintClick = useCallback(() => {
@@ -546,16 +553,32 @@ export const SampleDisplay: FC<SampleDisplayProps> = ({
             }, 1250);
           }
         },
-        Messages: () => {
-          if (sample?.messages) {
-            // eslint-disable-next-line @typescript-eslint/no-floating-promises
-            navigator.clipboard.writeText(messagesToStr(sample.messages));
-            setIcon(ApplicationIcons.confirm);
-            setTimeout(() => {
-              setIcon(ApplicationIcons.copy);
-            }, 1250);
-          }
-        },
+        // offered only when a settled conversation exists to export — live
+        // streaming samples have none, and a silent no-op menu item reads
+        // as broken (chunked samples stream the text on demand inside the
+        // export, window by window — never a whole-conversation hydration)
+        ...(exportMessages
+          ? {
+              Messages: () => {
+                // the confirm icon must wait for the clipboard write — it
+                // can reject (unfocused document), and flipping early
+                // reads as a false success
+                exportMessages()
+                  .then((parts) =>
+                    navigator.clipboard.writeText(parts.join(""))
+                  )
+                  .then(() => {
+                    setIcon(ApplicationIcons.confirm);
+                    setTimeout(() => {
+                      setIcon(ApplicationIcons.copy);
+                    }, 1250);
+                  })
+                  .catch((error: unknown) => {
+                    console.error("Failed to copy messages:", error);
+                  });
+              },
+            }
+          : {}),
         Transcript: () => {
           if (sampleEvents && sampleEvents.length > 0) {
             // eslint-disable-next-line @typescript-eslint/no-floating-promises
@@ -587,15 +610,24 @@ export const SampleDisplay: FC<SampleDisplayProps> = ({
               JSON.stringify(sample, null, 2)
             );
           },
-          Messages: () => {
-            if (sample.messages && sample.messages.length > 0) {
-              // eslint-disable-next-line @typescript-eslint/no-floating-promises
-              api.download_file(
-                `${sampleId}-messages.txt`,
-                messagesToStr(sample.messages)
-              );
-            }
-          },
+          // offered only when a settled conversation exists to export (see
+          // the copy dropdown)
+          ...(exportMessages
+            ? {
+                Messages: () => {
+                  exportMessages()
+                    .then((parts) =>
+                      api.download_file(
+                        `${sampleId}-messages.txt`,
+                        new Blob(parts, { type: "text/plain" })
+                      )
+                    )
+                    .catch((error: unknown) => {
+                      console.error("Failed to download messages:", error);
+                    });
+                },
+              }
+            : {}),
           Transcript: () => {
             if (sampleEvents && sampleEvents.length > 0) {
               // eslint-disable-next-line @typescript-eslint/no-floating-promises
@@ -625,15 +657,6 @@ export const SampleDisplay: FC<SampleDisplayProps> = ({
   // Search and Scans are no longer toolbar buttons — the always-visible
   // activity rail (rendered below the timeline) is the sole entry point.
 
-  // Is the sample running?
-  const running = useMemo(() => {
-    return isRunning(
-      selectedSampleSummary,
-      runningSampleData,
-      sampleData.status
-    );
-  }, [selectedSampleSummary, runningSampleData, sampleData.status]);
-
   // Only a SUCCESSFUL finish may scroll the transcript/messages back to the
   // top when a live sample completes. An errored or cancelled run renders its
   // error panel at the bottom — exactly where the user watching the live tail
@@ -643,8 +666,6 @@ export const SampleDisplay: FC<SampleDisplayProps> = ({
     !selectedSampleSummary?.error &&
     logDetails?.status !== "error" &&
     logDetails?.status !== "cancelled";
-
-  const sampleDetailNavigation = useSampleDetailNavigation();
 
   const displayModeContext = useMemo(
     () => ({ displayMode: displayMode ?? ("rendered" as const) }),
@@ -802,7 +823,7 @@ export const SampleDisplay: FC<SampleDisplayProps> = ({
             </div>
           </StickyScroll>
         ) : undefined}
-        <ActivityBar animating={showActivity} />
+        <LoadingBar loading={showActivity} />
 
         <div style={tabsContainerStyle}>
           <TabSet
@@ -816,11 +837,7 @@ export const SampleDisplay: FC<SampleDisplayProps> = ({
             <TabPanel
               key={kSampleTranscriptTabId}
               id={kSampleTranscriptTabId}
-              className={clsx(
-                "sample-tab",
-                styles.transcriptContainer,
-                styles.overflowVisible
-              )}
+              className={clsx("sample-tab", styles.overflowVisible)}
               title="Transcript"
               onSelected={onSelectedTab}
               selected={
@@ -904,23 +921,34 @@ export const SampleDisplay: FC<SampleDisplayProps> = ({
                 panel={hasRail ? railPanel : undefined}
                 label={railLabel}
               >
-                <ChatViewVirtualList
-                  key={chatListId}
-                  id={chatListId}
-                  messages={effectiveMessages}
-                  initialMessageId={sampleDetailNavigation.message}
-                  followRequested={sampleDetailNavigation.follow}
-                  display={chatDisplay}
-                  labels={messagesSearchLabels}
-                  linking={chatLinking}
-                  onNativeFindChanged={setNativeFind}
-                  scrollRef={scrollRef}
-                  tools={chatTools}
-                  running={running}
-                  backfilling={backfilling}
-                  scrollToTopOnFinish={scrollToTopOnFinish}
-                  className={styles.fullWidth}
-                />
+                {sampleMessages.rows.error ? (
+                  // inside the rail host: the activity rail is the sole
+                  // search/scans entry point and must survive the error
+                  <ErrorPanel
+                    title="An error occurred while loading messages."
+                    error={sampleMessages.rows.error}
+                  />
+                ) : (
+                  <ChatViewRowsVirtualList
+                    key={chatListId}
+                    id={chatListId}
+                    rows={sampleMessages.rows.data ?? kNoMessageRows}
+                    hasMoreRows={sampleMessages.hasMore}
+                    onLoadMoreRows={sampleMessages.loadMore}
+                    initialMessageId={sampleDetailNavigation.message}
+                    followRequested={sampleDetailNavigation.follow}
+                    display={chatDisplay}
+                    labels={messagesSearchLabels}
+                    linking={chatLinking}
+                    onNativeFindChanged={setNativeFind}
+                    scrollRef={scrollRef}
+                    tools={chatTools}
+                    running={running}
+                    backfilling={backfilling || sampleMessages.rows.loading}
+                    scrollToTopOnFinish={scrollToTopOnFinish}
+                    className={styles.fullWidth}
+                  />
+                )}
               </RailSidebarHost>
             </TabPanel>
             <TabPanel
@@ -986,7 +1014,7 @@ export const SampleDisplay: FC<SampleDisplayProps> = ({
                 selected={effectiveSelectedTab === kSampleErrorTabId}
               >
                 <div className={clsx(styles.error)}>
-                  {sample?.error ? (
+                  {sample.error ? (
                     <Card key={`sample-error}`}>
                       <CardHeader label={`Sample Error`} />
                       <CardBody>
@@ -1258,14 +1286,14 @@ const metadataViewsForSample = (
     );
   }
 
-  if (Object.keys(sample?.metadata).length > 0) {
+  if (Object.keys(sample.metadata).length > 0) {
     sampleMetadatas.push(
       <Card key={`sample-metadata-${id}`}>
         <CardHeader label="Metadata" />
         <CardBody padded={false}>
           <RecordTree
             id={`task-sample-metadata-${id}`}
-            record={sample?.metadata}
+            record={sample.metadata}
             className={clsx("tab-pane", styles.noTop)}
             scrollRef={scrollRef}
             copyButton={true}
@@ -1275,14 +1303,14 @@ const metadataViewsForSample = (
     );
   }
 
-  if (Object.keys(sample?.store).length > 0) {
+  if (Object.keys(sample.store).length > 0) {
     sampleMetadatas.push(
       <Card key={`sample-store-${id}`}>
         <CardHeader label="Store" />
         <CardBody padded={false}>
           <RecordTree
             id={`task-sample-store-${id}`}
-            record={sample?.store}
+            record={sample.store}
             className={clsx("tab-pane", styles.noTop)}
             scrollRef={scrollRef}
             processStore={true}

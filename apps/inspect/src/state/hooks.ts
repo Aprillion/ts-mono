@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
-import { EvalSample } from "@tsmono/inspect-common/types";
+import {
+  ConfigUpdate,
+  EvalConfig,
+  EvalSample,
+} from "@tsmono/inspect-common/types";
+import { effectiveEvalConfig } from "@tsmono/inspect-common/utils";
 import { AsyncData, createLogger } from "@tsmono/util";
 
 import { getApi, useLogDir } from "../app_config";
@@ -145,6 +150,7 @@ export const useEvalScorePanelSort = (): ScorePanelSortState | undefined => {
     if (!stored) return undefined;
     return {
       column: stored.column ?? null,
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
       dir: stored.dir ?? "asc",
     };
   }, [stored]);
@@ -166,6 +172,26 @@ export const useSelectedLogDetails = (): LogHeader | undefined => {
 
 export const useEvalSpec = () => {
   return useSelectedLogDetails()?.eval;
+};
+
+/** The selected log's mid-run config changes (undefined when none). */
+export const useConfigUpdates = (): ConfigUpdate[] | undefined => {
+  return useSelectedLogDetails()?.config_updates ?? undefined;
+};
+
+/**
+ * The eval config the selected run actually ran under — launch config with
+ * `config_updates` folded in. Functional readers must use this rather than
+ * `evalSpec.config` so mid-run retunes are honored.
+ */
+export const useEffectiveEvalConfig = (): EvalConfig | undefined => {
+  const details = useSelectedLogDetails();
+  const config = details?.eval.config;
+  const configUpdates = details?.config_updates;
+  return useMemo(() => {
+    if (!config) return undefined;
+    return effectiveEvalConfig(config, configUpdates);
+  }, [config, configUpdates]);
 };
 
 /**
@@ -279,6 +305,7 @@ export const useEvalDescriptor = () => {
   const scores = useScores();
   const sampleSummaries = useSelectedSampleSummariesData();
   return useMemo(() => {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
     return scores ? createEvalDescriptor(scores, sampleSummaries) : null;
   }, [scores, sampleSummaries]);
 };
@@ -328,35 +355,44 @@ export const useFilteredSamples = () => {
     (state) => state.logActions.clearFilterError
   );
 
-  return useMemo(() => {
+  const { samples, filterError } = useMemo(() => {
     // Apply text filter
     const { result, error, allErrors } =
       samplesDescriptor && filter
         ? filterSamples(samplesDescriptor, sampleSummaries, filter)
         : { result: sampleSummaries, error: undefined, allErrors: false };
 
-    if (error && allErrors) {
-      setFilterError(error);
+    // A filter that errored on every sample is reported rather than applied —
+    // the unfiltered list stays visible under the error annotation.
+    const failedAllSamples = error !== undefined && allErrors;
+
+    const filtered = failedAllSamples ? sampleSummaries : result;
+
+    // Skip the clone + sort when the list is already ordered (the common case).
+    const sorted =
+      filtered.length < 2 || samplesAreSorted(filtered)
+        ? filtered
+        : [...filtered].sort(compareSamples);
+
+    return {
+      samples: sorted,
+      filterError: failedAllSamples ? error : undefined,
+    };
+  }, [samplesDescriptor, sampleSummaries, filter]);
+
+  // Publishing the error is a side effect, so it belongs in an effect rather
+  // than the memo above: a store write during render makes SampleFilter update
+  // while SamplesTab is rendering, and leaves the memo impure — which React
+  // Compiler is free to cache, stranding a stale error on the filter input.
+  useEffect(() => {
+    if (filterError) {
+      setFilterError(filterError);
     } else {
       clearFilterError();
     }
+  }, [filterError, setFilterError, clearFilterError]);
 
-    const filtered =
-      error === undefined || !allErrors ? result : sampleSummaries;
-
-    // Skip the clone + sort when the list is already ordered (the common case).
-    if (filtered.length < 2 || samplesAreSorted(filtered)) {
-      return filtered;
-    }
-
-    return [...filtered].sort(compareSamples);
-  }, [
-    samplesDescriptor,
-    sampleSummaries,
-    filter,
-    setFilterError,
-    clearFilterError,
-  ]);
+  return samples;
 };
 
 // Provides the currently selected sample summary
@@ -394,10 +430,8 @@ export const useSelectedEvalSampleData = (): EvalSampleData => {
  */
 export const useSelectedSampleInvalidation = ():
   EvalSample["invalidation"] | undefined =>
-  usePassiveEvalSampleData(
-    useLogDir(),
-    useStore((state) => state.log.selectedSampleHandle)
-  ).data?.sample?.invalidation ?? undefined;
+  usePassiveEvalSampleData(useStore((state) => state.log.selectedSampleHandle))
+    .data?.sample?.invalidation ?? undefined;
 
 export const useLogSelection = () => {
   const selectedSampleSummary = useSelectedSampleSummary();

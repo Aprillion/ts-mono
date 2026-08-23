@@ -28,6 +28,13 @@ const shouldSubmitOnEnter = (
   return target.matches(TEXT_INPUT_SELECTOR);
 };
 
+const OVERFLOW_CLASS: Record<NonNullable<ModalProps["overflow"]>, string> = {
+  auto: styles.overflowAuto,
+  hidden: styles.overflowHidden,
+  scroll: styles.overflowScroll,
+  visible: styles.overflowVisible,
+};
+
 interface ModalProps {
   show: boolean;
   onHide: () => void;
@@ -117,6 +124,7 @@ export const Modal: FC<ModalProps> = ({
     }, 0);
     return () => {
       window.clearTimeout(timer);
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- intentional: activeElement cast hides null/non-HTMLElement; .focus may be absent
       previouslyFocused?.focus?.();
     };
   }, [show]);
@@ -126,7 +134,16 @@ export const Modal: FC<ModalProps> = ({
   const titleId = id ? `${id}-title` : fallbackTitleId;
 
   return createPortal(
-    <div className={styles.backdrop} onClick={onHide}>
+    // Dismissal is keyboard-accessible via the Escape handler above and the
+    // close button below; the backdrop is a mouse-only convenience, so it
+    // carries no semantics of its own.
+    <div
+      className={styles.backdrop}
+      role="presentation"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onHide();
+      }}
+    >
       <div
         ref={modalRef}
         id={id}
@@ -136,7 +153,6 @@ export const Modal: FC<ModalProps> = ({
         tabIndex={-1}
         className={clsx(styles.modal, className)}
         style={width ? { maxWidth: width } : undefined}
-        onClick={(e) => e.stopPropagation()}
       >
         <div className={styles.header}>
           <h3 id={titleId} className={styles.title}>
@@ -154,9 +170,7 @@ export const Modal: FC<ModalProps> = ({
         <div
           className={clsx(
             styles.body,
-            styles[
-              `overflow${overflow.charAt(0).toUpperCase()}${overflow.slice(1)}`
-            ],
+            OVERFLOW_CLASS[overflow],
             !padded && styles.noPadding,
             bodyClassName
           )}

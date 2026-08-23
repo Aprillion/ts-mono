@@ -14,6 +14,7 @@ import {
   toDisplayScorers,
 } from "../../../scoring/metrics";
 import { groupScorers } from "../../../scoring/scores";
+import { useEffectiveEvalConfig } from "../../../state/hooks";
 import { formatModelText } from "../../../utils/evalModel";
 import { ApplicationIcons } from "../../appearance/icons";
 
@@ -38,16 +39,19 @@ export const CollapsedTitleBar: FC<CollapsedTitleBarProps> = ({
   status,
   sampleCount,
 }) => {
+  // Effective (folded) config: a mid-run change to continue_on_fail decides
+  // whether an errored run still shows metrics.
+  const effectiveConfig = useEffectiveEvalConfig();
   const showMetrics =
     status === "success" ||
     (status === "started" && (runningMetrics?.length ?? 0) > 0) ||
-    (status === "error" && evalSpec?.config["continue_on_fail"]);
+    (status === "error" && effectiveConfig?.continue_on_fail);
 
   const scorers = runningMetrics
     ? displayScorersFromRunningMetrics(runningMetrics)
     : toDisplayScorers(evalResults?.scores);
 
-  const expandedScorers = expandGroupedMetrics(scorers ?? []);
+  const expandedScorers = expandGroupedMetrics(scorers);
   const totalMetrics = expandedScorers.reduce(
     (n, s) => n + s.metrics.length,
     0
@@ -114,6 +118,7 @@ const InlineMetrics: FC<InlineMetricsProps> = ({ scorers }) => {
         key: `${scorerIdx}-${metricIdx}`,
         label: metricDisplayName(metric),
         value:
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
           metric.value !== undefined && metric.value !== null
             ? formatPrettyDecimal(metric.value)
             : "n/a",

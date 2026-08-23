@@ -4,7 +4,7 @@ import {
   VscodeFormHelper,
 } from "@vscode-elements/react-elements";
 import { FC, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useBlocker } from "react-router-dom";
+import { useBlocker } from "react-router";
 
 import { Modal } from "@tsmono/react/components";
 import { useDocumentTitle } from "@tsmono/react/hooks";
@@ -78,6 +78,7 @@ export const ProjectPanel: FC<ProjectPanelProps> = ({ config }) => {
   // We store the ID since React may recreate the DOM element
   const handleSaveMouseDown = useCallback(() => {
     const el = document.activeElement as HTMLElement;
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
     if (el && el !== document.body && el.id) {
       focusedFieldIdRef.current = el.id;
     } else {
@@ -112,6 +113,7 @@ export const ProjectPanel: FC<ProjectPanelProps> = ({ config }) => {
         if (!mutation.isPending) {
           // Capture focused element ID for restoration after save
           const el = document.activeElement as HTMLElement;
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
           if (el && el !== document.body && el.id) {
             focusedFieldIdRef.current = el.id;
           } else {

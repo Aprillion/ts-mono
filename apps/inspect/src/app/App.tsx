@@ -18,14 +18,14 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtoolsPanel } from "@tanstack/react-query-devtools";
 import ClipboardJS from "clipboard";
 import { FC, useCallback, useEffect, useLayoutEffect, useRef } from "react";
-import { RouterProvider } from "react-router-dom";
+import { RouterProvider } from "react-router/dom";
 
 import {
   ComponentIconProvider,
   ComponentIcons,
 } from "@tsmono/react/components";
 import { ComponentStateProvider } from "@tsmono/react/state";
-import { basename } from "@tsmono/util";
+import { basename, isUri } from "@tsmono/util";
 import { ZustandDevtoolsPanel } from "@tsmono/zustand-devtools";
 
 import {
@@ -35,7 +35,7 @@ import {
   setLogRoot,
 } from "../app_config";
 import { HostMessage } from "../client/api/types.ts";
-import { imperativeLogData } from "../log_data";
+import { FetchEngineController, imperativeLogData } from "../log_data";
 import { inspectStateHooks } from "../state/componentStateAdapter";
 import { queryClient } from "../state/queryClient.ts";
 import { storeImplementation, useStore } from "../state/store.ts";
@@ -43,7 +43,6 @@ import {
   SETTINGS_STORAGE_KEY,
   useUserSettings,
 } from "../state/userSettings.ts";
-import { isUri } from "../utils/uri.ts";
 
 import { ApplicationIcons } from "./appearance/icons.ts";
 import { AppRouter } from "./routing/AppRouter.tsx";
@@ -175,6 +174,7 @@ export const AppContent: FC = () => {
   return (
     <>
       <ThemePreferenceSyncController />
+      <FetchEngineController />
       <ComponentIconProvider icons={componentIcons}>
         <ComponentStateProvider hooks={inspectStateHooks}>
           <RouterProvider router={AppRouter} />

@@ -108,6 +108,10 @@ const MarkdownDivComponent = forwardRef<HTMLDivElement, MarkdownDivProps>(
     }, [markdown, rendererName, cachedHtml, cacheKey, applyPostProcess]);
 
     return (
+      // The container is not itself a control: onClick delegates for the
+      // anchors inside the rendered markdown, which already fire click on
+      // Enter, so no separate key handler is needed.
+      // eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events
       <div
         ref={ref}
         dangerouslySetInnerHTML={{ __html: renderedHtml }}
@@ -160,10 +164,12 @@ export class MarkdownRenderQueue {
 
         try {
           const result = await task();
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
           if (!cancelled) {
             resolve(result);
           }
         } catch (error) {
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
           if (!cancelled) {
             reject(error instanceof Error ? error : new Error(String(error)));
           }

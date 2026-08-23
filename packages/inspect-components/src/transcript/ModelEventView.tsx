@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unnecessary-condition */
 import clsx from "clsx";
 import { FC, useMemo, useRef, useState } from "react";
 
@@ -25,6 +26,7 @@ import { StopReasonBadge } from "./event/StopReasonBadge";
 import { formatTiming, formatTitle, isCancelError } from "./event/utils";
 import { TranscriptIcons } from "./icons";
 import styles from "./ModelEventView.module.css";
+import { recentInputMessages } from "./recentInputMessages";
 import { retryAttemptKey } from "./timeline/retryGrouping";
 import { EventNode, EventNodeContext, EventPanelCallbacks } from "./types";
 
@@ -62,8 +64,8 @@ export const ModelEventView: FC<ModelEventViewProps> = ({
   const isCancelled = isCancelError(event.error);
   const isFailed = !!event.error && !isCancelled;
 
-  const totalUsage = event.output?.usage?.total_tokens;
-  const callTime = event.output?.time;
+  const totalUsage = event.output.usage?.total_tokens;
+  const callTime = event.output.time;
 
   // Note: despite the type system saying otherwise, this has appeared empirically
   // to sometimes be undefined
@@ -77,7 +79,7 @@ export const ModelEventView: FC<ModelEventViewProps> = ({
   // Stop reason / refusal detail for the (primary) generated choice. `category`
   // and `explanation` are only present on a refusal/content-filter stop. Skip the
   // panel for a plain "stop" with no details — otherwise it shows on every call.
-  const firstChoice = event.output?.choices?.[0];
+  const firstChoice = event.output.choices[0];
   const stopDetails = firstChoice?.stop_details;
   const showStopReason =
     !!firstChoice && (!!stopDetails || firstChoice.stop_reason !== "stop");
@@ -86,40 +88,16 @@ export const ModelEventView: FC<ModelEventViewProps> = ({
   // panel and display those user messages (exclude tool_call messages as they
   // are already shown in the tool call above)
   const userMessages = useMemo<ChatMessage[]>(() => {
-    const result: ChatMessage[] = [];
-
     // When agent tool results have been filtered from input (shown on AgentCard
     // instead), the trailing assistant message is the previous model call's output
     // — just show it without crawling backward through system/user messages.
     const agentResultsFiltered = !!(event as Record<string, unknown>)
       .agentResultsFiltered;
 
-    if (!agentResultsFiltered) {
-      // if there is an assistant message immediately before then include this
-      // (as it could be an assistant compaction message)
-      let offset: number | undefined = undefined;
-      const lastMessage = event.input.at(-1);
-      if (lastMessage?.role === "assistant") {
-        result.push(lastMessage);
-        offset = -1;
-      }
-
-      for (const msg of event.input.slice(offset).reverse()) {
-        if (
-          (msg.role === "user" && !msg.tool_call_id) ||
-          msg.role === "system" ||
-          // If the client doesn't support tool events, then tools messages are allowed to be displayed
-          // in this view, since no tool events will be shown.
-          (context?.hasToolEvents === false && msg.role === "tool")
-        ) {
-          result.unshift(msg);
-        } else {
-          break;
-        }
-      }
-    }
-
-    return result;
+    return recentInputMessages(event.input, {
+      agentResultsFiltered,
+      hasToolEvents: context?.hasToolEvents,
+    });
   }, [event, context?.hasToolEvents]);
 
   const hasHiddenMessages = event.input.length > userMessages.length;
@@ -163,7 +141,7 @@ export const ModelEventView: FC<ModelEventViewProps> = ({
       ? `${panelTitle} · Cancelled${formatFailureTime(event)}`
       : formatTitle(panelTitle, totalUsage, callTime);
 
-  const fallback = event.output?.fallback;
+  const fallback = event.output.fallback;
   const fallbackBadge = fallback ? (
     <span className={styles.fallbackBadge}>
       · fallback → {fallback.fallback_model}
@@ -215,18 +193,18 @@ export const ModelEventView: FC<ModelEventViewProps> = ({
           hasHiddenMessages &&
           !showAllMessages && (
             <div className={clsx("text-size-small", styles.showAllLink)}>
-              <a
-                href="#"
-                onClick={(e) => {
-                  e.preventDefault();
+              <button
+                type="button"
+                onClick={() => {
                   setShowAllMessages(true);
                 }}
               >
                 <i
                   className={clsx(TranscriptIcons.expand, styles.showAllIcon)}
+                  aria-hidden="true"
                 />
                 Show all messages
-              </a>
+              </button>
             </div>
           )}
         <ChatView

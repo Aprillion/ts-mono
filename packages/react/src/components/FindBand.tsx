@@ -204,6 +204,7 @@ export const FindBand: FC<FindBandProps> = ({ onClose, debounceMs = 100 }) => {
         }
       }
 
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- intentional: activeElement can be null; the cast hides it
       focusedElement?.focus();
     },
     [setFindTarget, extendedFindTerm, countAllMatches, getMatchCountersVersion]
@@ -223,6 +224,7 @@ export const FindBand: FC<FindBandProps> = ({ onClose, debounceMs = 100 }) => {
       if (scrollTimeoutRef.current !== null) {
         window.clearTimeout(scrollTimeoutRef.current);
       }
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
       if (focusTimeout !== null) {
         window.clearTimeout(focusTimeout);
       }
@@ -581,7 +583,7 @@ function inUnsearchableElement(range: Range) {
 }
 
 function selectionParentElement(range: Range) {
-  let element: Element | null = null;
+  let element: Element | null;
 
   if (range.startContainer.nodeType === Node.ELEMENT_NODE) {
     // This is a direct element
@@ -605,7 +607,7 @@ function selectionParentElement(range: Range) {
 
 /**
  * Polls until the search term appears in a searchable (non-unsearchable) DOM
- * text node. After Virtuoso scrolls a virtual list item into view, the
+ * text node. After the virtual list scrolls an item into view, the
  * onContentReady callback may fire before the content is actually rendered,
  * especially for large scroll distances. This ensures we wait for the text
  * to be present before calling window.find().

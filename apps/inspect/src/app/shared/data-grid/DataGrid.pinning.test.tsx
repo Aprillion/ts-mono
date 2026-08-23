@@ -30,7 +30,7 @@ const makeColumns = (pinnedIds: string[]): ExtendedColumnDef<Row>[] =>
     size: 100,
     accessorFn: (r: Row) => r[key],
     cell: ({ getValue }) => <div>{getValue<string>()}</div>,
-    ...(pinnedIds.includes(key) ? { pinned: "left" as const } : {}),
+    ...(pinnedIds.includes(key) ? { pinned: "start" as const } : {}),
   }));
 
 // jsdom has no DataTransfer; provide the bits the handlers touch.
@@ -60,9 +60,7 @@ const dragHeader = async (from: string, to: string) => {
 };
 
 const headerOrder = () =>
-  screen
-    .getAllByRole("columnheader")
-    .map((cell) => cell.textContent?.trim() ?? "");
+  screen.getAllByRole("columnheader").map((cell) => cell.textContent.trim());
 
 const headerCell = (label: string) =>
   screen.getByText(label).closest('[role="columnheader"]') as HTMLElement;

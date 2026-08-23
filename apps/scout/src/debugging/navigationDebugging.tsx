@@ -7,13 +7,14 @@ import {
   To,
   useLocation,
   useNavigate,
-} from "react-router-dom";
+} from "react-router";
 
 const NAVIGATION_LOGGING_ENABLED = false;
 
 const timestamp = () => new Date().toISOString().slice(11, 23);
 
 export const navigationLog = (description: string) => {
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
   if (NAVIGATION_LOGGING_ENABLED) {
     console.log(`[${timestamp()}] ${description}`);
   }

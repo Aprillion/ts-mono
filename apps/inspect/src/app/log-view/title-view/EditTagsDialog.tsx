@@ -61,7 +61,7 @@ export const EditTagsDialog: FC<EditTagsDialogProps> = ({
   useEffect(() => {
     if (!showing) return;
     let cancelled = false;
-    if (api?.get_user_info) {
+    if (api.get_user_info) {
       api
         .get_user_info()
         .then((info) => {
@@ -117,7 +117,7 @@ export const EditTagsDialog: FC<EditTagsDialogProps> = ({
   };
 
   const canSave =
-    !submitting && hasChanges && author.trim().length > 0 && !!api?.edit_log;
+    !submitting && hasChanges && author.trim().length > 0 && !!api.edit_log;
 
   // Re-entry guard: prevents a second save from starting if the user
   // clicks twice before the first finishes. Kept in a ref (not state)
@@ -125,7 +125,7 @@ export const EditTagsDialog: FC<EditTagsDialogProps> = ({
   const inFlightRef = useRef(false);
 
   const handleSave = async () => {
-    if (!canSave || inFlightRef.current || !api?.edit_log) return;
+    if (!canSave || inFlightRef.current || !api.edit_log) return;
     inFlightRef.current = true;
     // NOTE: we intentionally do NOT call `setError(undefined)` here.
     // Clearing then re-setting the same error on a quick failure made
@@ -200,10 +200,19 @@ export const EditTagsDialog: FC<EditTagsDialogProps> = ({
     >
       <div className={sharedStyles.body}>
         <div className={sharedStyles.section}>
-          <label className={clsx("text-size-smaller", sharedStyles.label)}>
+          {/* Names the chip box, so it can't be a <label> — those may only
+              point at a single form control. */}
+          <span
+            id="edit-tags-label"
+            className={clsx("text-size-smaller", sharedStyles.label)}
+          >
             Tags
-          </label>
-          <div className={styles.chipBox}>
+          </span>
+          <div
+            className={styles.chipBox}
+            role="group"
+            aria-labelledby="edit-tags-label"
+          >
             {tags.length === 0 && (
               <span className={clsx("text-size-smaller", styles.empty)}>
                 No tags yet — add one below.

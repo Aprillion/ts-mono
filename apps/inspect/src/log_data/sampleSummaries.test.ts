@@ -4,6 +4,8 @@ import Dexie from "dexie";
 import { createElement, ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
+import { testEvalSpec } from "@tsmono/inspect-common/testing";
+
 import {
   ClientAPI,
   LogDetails,
@@ -19,7 +21,12 @@ import { queryClient } from "../state/queryClient";
 
 import { fetchEngine } from "./fetchEngine";
 import { pendingSamplesKey } from "./pendingSamples";
+import {
+  activateFetchEngine,
+  deactivateFetchEngine,
+} from "./replicationControl";
 import { mergeSampleSummaries, useSampleSummaries } from "./sampleSummaries";
+import { testClientAPI, testLogDetails } from "./testFixtures";
 
 const holder = vi.hoisted(() => ({
   service: null as DatabaseService | null,
@@ -37,7 +44,6 @@ vi.mock("../app_config", () => ({
     return holder.api;
   },
   getAppConfig: () => ({ singleFileMode: false }),
-  getLogDir: () => "/logs",
 }));
 
 describe("mergeSampleSummaries", () => {
@@ -114,10 +120,9 @@ describe("useSampleSummaries during a running eval", () => {
   let serverInfo: { size: number };
 
   const details = (sampleSummaries: SampleSummary[]): LogDetails =>
-    ({
-      version: 2,
+    testLogDetails({
       status: "started",
-      eval: {
+      eval: testEvalSpec({
         eval_id: "eval-run",
         run_id: "run-run",
         created: "2026-01-01T00:00:00Z",
@@ -125,11 +130,11 @@ describe("useSampleSummaries during a running eval", () => {
         task_id: "tid-run",
         task_version: 1,
         model: "mockllm/model",
-      },
+      }),
       sampleSummaries,
-    }) as unknown as LogDetails;
+    });
 
-  const api = {
+  const api = testClientAPI({
     get_log_details: vi.fn(() => Promise.resolve(serverDetails)),
     get_log_info: vi.fn(() => Promise.resolve(serverInfo)),
     get_log_pending_samples: vi.fn(
@@ -147,7 +152,7 @@ describe("useSampleSummaries during a running eval", () => {
               }
         )
     ),
-  } as unknown as ClientAPI;
+  });
 
   const wrapper = ({ children }: { children: ReactNode }) =>
     createElement(QueryClientProvider, { client: queryClient }, children);
@@ -159,9 +164,20 @@ describe("useSampleSummaries during a running eval", () => {
     holder.service = db;
     holder.api = api;
     await db.openDatabase();
+    // What <FetchEngineController> does below the gate: start the engine
+    // from a config snapshot (acquisition paths only await readiness).
+    activateFetchEngine({
+      api,
+      singleFileMode: false,
+      loader: "replicator",
+      inspect_version: "test",
+      scout_version: null,
+      logDir: LOG_DIR,
+    });
   });
 
   afterEach(async () => {
+    deactivateFetchEngine();
     fetchEngine.stop();
     await db.closeDatabase();
     await Dexie.delete(DB_NAME);

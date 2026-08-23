@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { testEvalSample } from "@tsmono/inspect-common/testing";
 import { EvalSample } from "@tsmono/inspect-common/types";
 
 import { initAppConfig } from "../app_config";
 import { SampleHandle } from "../app/types";
 import {
-  ClientAPI,
   SampleData,
   SampleDataResponse,
   SampleSummary,
@@ -23,6 +23,7 @@ import {
 import { SampleNotFoundError } from "./sampleFetch";
 import { sampleQueryKey } from "./sampleQuery";
 import { samplesListingKey, SamplesListingRow } from "./samplesListing";
+import { testClientAPI, testSampleSummary } from "./testFixtures";
 
 const LOG_DIR = "/logs";
 
@@ -31,7 +32,7 @@ const mockApi = {
   get_log_sample_data: vi.fn(),
   log_message: vi.fn(),
 };
-const api = mockApi as unknown as ClientAPI;
+const api = testClientAPI(mockApi);
 
 const emptySampleData: SampleData = {
   events: [],
@@ -77,15 +78,8 @@ const seedLogDetails = (logFile: string, summaries: SampleSummary[]) => {
   );
 };
 
-const rawSample = (overrides: Record<string, unknown> = {}) =>
-  ({
-    id: "sample-1",
-    epoch: 1,
-    events: [],
-    messages: [],
-    attachments: {},
-    ...overrides,
-  }) as unknown as EvalSample;
+const rawSample = (): EvalSample =>
+  testEvalSample({ id: "sample-1", epoch: 1 });
 
 beforeEach(() => {
   mockApi.get_log_sample.mockReset();
@@ -191,9 +185,7 @@ describe("streamRunningSampleTick", () => {
 
     const result = await streamRunningSampleTick(api, LOG_DIR, handle);
     expect(result.finalized).toBe(true);
-    const primed = queryClient.getQueryData<EvalSample>(
-      sampleQueryKey(LOG_DIR, handle)
-    );
+    const primed = queryClient.getQueryData<EvalSample>(sampleQueryKey(handle));
     expect(primed?.id).toBe("sample-1");
   });
 
@@ -206,9 +198,7 @@ describe("streamRunningSampleTick", () => {
 
     const result = await streamRunningSampleTick(api, LOG_DIR, handle);
     expect(result.finalized).toBe(false);
-    expect(
-      queryClient.getQueryData(sampleQueryKey(LOG_DIR, handle))
-    ).toBeUndefined();
+    expect(queryClient.getQueryData(sampleQueryKey(handle))).toBeUndefined();
   });
 
   it("synthesizes an errored sample from the live summary on a missing EvalSample", async () => {
@@ -216,8 +206,8 @@ describe("streamRunningSampleTick", () => {
     seedLogDetails(handle.logFile, []);
     queryClient.setQueryData(pendingSamplesKey(LOG_DIR, handle.logFile), {
       samples: [
-        { id: "sample-1", epoch: 1, error: "boom", completed: true },
-      ] as unknown as SampleSummary[],
+        testSampleSummary({ id: "sample-1", error: "boom", completed: true }),
+      ],
       refresh: 2,
     });
     mockApi.get_log_sample_data.mockResolvedValueOnce({ status: "NotFound" });
@@ -225,9 +215,7 @@ describe("streamRunningSampleTick", () => {
 
     const result = await streamRunningSampleTick(api, LOG_DIR, handle);
     expect(result.finalized).toBe(true);
-    const primed = queryClient.getQueryData<EvalSample>(
-      sampleQueryKey(LOG_DIR, handle)
-    );
+    const primed = queryClient.getQueryData<EvalSample>(sampleQueryKey(handle));
     expect(primed?.error?.message).toBe("boom");
   });
 
@@ -245,7 +233,7 @@ describe("streamRunningSampleTick", () => {
   it("finalizes when the log summary reports the sample completed", async () => {
     const handle = makeHandle("summary-complete.eval");
     seedLogDetails(handle.logFile, [
-      { id: "sample-1", epoch: 1, completed: true } as unknown as SampleSummary,
+      testSampleSummary({ id: "sample-1", completed: true }),
     ]);
     mockApi.get_log_sample_data.mockResolvedValueOnce({
       status: "NotModified",
@@ -254,9 +242,7 @@ describe("streamRunningSampleTick", () => {
 
     const result = await streamRunningSampleTick(api, LOG_DIR, handle);
     expect(result.finalized).toBe(true);
-    expect(
-      queryClient.getQueryData(sampleQueryKey(LOG_DIR, handle))
-    ).toBeDefined();
+    expect(queryClient.getQueryData(sampleQueryKey(handle))).toBeDefined();
   });
 
   it("a key change replaces the session: fresh cursors, no leaked events", async () => {

@@ -1,11 +1,11 @@
 import {
   ColumnSizingState,
   flexRender,
-  getCoreRowModel,
   OnChangeFn,
+  RowData,
   RowSelectionState,
   SortingState,
-  useReactTable,
+  useTable,
 } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import clsx from "clsx";
@@ -21,12 +21,15 @@ import {
   useState,
 } from "react";
 
+import {
+  ColumnFilterControl,
+  type FilterSpec,
+} from "@tsmono/inspect-components/columnFilter";
+
 import { useLoggingNavigate } from "../../../debugging/navigationDebugging";
 import { ApplicationIcons } from "../../../icons";
-import type { SimpleCondition } from "../../../query";
 import { openRouteInNewTab } from "../../../router/url";
-import { FilterType } from "../../../state/store";
-import { ColumnFilterControl } from "../columnFilter";
+import type { FilterType } from "../../../state/store";
 import {
   BaseColumnMeta,
   ExtendedColumnDef,
@@ -34,6 +37,7 @@ import {
 } from "../columnTypes";
 
 import styles from "./DataGrid.module.css";
+import { dataGridFeatures } from "./tableFeatures";
 import type { DataGridProps, DataGridTableState } from "./types";
 
 /**
@@ -41,7 +45,7 @@ import type { DataGridProps, DataGridTableState } from "./types";
  * row selection, keyboard navigation, and column reordering.
  */
 export function DataGrid<
-  TData,
+  TData extends RowData,
   TColumn extends ExtendedColumnDef<TData, BaseColumnMeta>,
   TState extends DataGridTableState = DataGridTableState,
 >({
@@ -110,13 +114,9 @@ export function DataGrid<
 
   // Column filter change handler
   const handleColumnFilterChange = useCallback(
-    (
-      columnId: string,
-      filterType: FilterType,
-      condition: SimpleCondition | null
-    ) => {
+    (columnId: string, filterType: FilterType, spec: FilterSpec | null) => {
       onStateChange((prev) => {
-        if (condition === null) {
+        if (spec === null) {
           // Remove the filter entirely
           const newFilters = { ...prev.columnFilters };
           delete newFilters[columnId];
@@ -133,7 +133,7 @@ export function DataGrid<
             [columnId]: {
               columnId,
               filterType,
-              condition,
+              spec,
             },
           },
         };
@@ -209,6 +209,7 @@ export function DataGrid<
 
   // Compute effective column order
   const effectiveColumnOrder = useMemo(() => {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
     if (columnOrder && columnOrder.length > 0) {
       return columnOrder;
     }
@@ -297,15 +298,10 @@ export function DataGrid<
     resetDragState();
   }, [resetDragState]);
 
-  // Create table instance
-  // useReactTable returns unmemoizable functions
-  // https://github.com/TanStack/table/issues/5567
-  // https://github.com/facebook/react/issues/33057
-  // eslint-disable-next-line react-hooks/incompatible-library
-  const table = useReactTable({
+  const table = useTable({
+    features: dataGridFeatures,
     data,
     columns,
-    getCoreRowModel: getCoreRowModel(),
     manualSorting: true,
     columnResizeMode: "onChange",
     enableColumnResizing: true,
@@ -402,9 +398,9 @@ export function DataGrid<
         ? rows.findIndex((r) => r.id === focusedRowId)
         : -1;
 
-      let newFocusedIndex = focusedIndex;
-      let shouldUpdateSelection = false;
-      let shouldExtendSelection = false;
+      let newFocusedIndex: number;
+      let shouldUpdateSelection: boolean;
+      let shouldExtendSelection: boolean;
 
       switch (e.key) {
         case "ArrowDown":
@@ -543,6 +539,7 @@ export function DataGrid<
   );
 
   // Create virtualizer
+  // eslint-disable-next-line react-hooks/incompatible-library
   const rowVirtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => containerRef.current,
@@ -605,9 +602,15 @@ export function DataGrid<
   };
 
   return (
+    // A keyboard-scrollable region (WCAG 2.1.1) that also runs the table's
+    // arrow-key row navigation. The tab stop is the region itself, not a
+    // widget role the wrapper doesn't have — the <table> inside carries the
+    // structure.
+    // eslint-disable-next-line jsx-a11y/no-static-element-interactions
     <div
       ref={containerRef}
       className={clsx(className, styles.container)}
+      // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
       tabIndex={0}
       onKeyDown={handleKeyDown}
       onScroll={onScroll}
@@ -643,7 +646,8 @@ export function DataGrid<
                       .filter(Boolean)
                       .join("\n")}
                   >
-                    <div
+                    <button
+                      type="button"
                       className={clsx(
                         styles.headerContent,
                         align === "center" && styles.headerCellCenter
@@ -683,30 +687,31 @@ export function DataGrid<
                           />
                         ),
                       }[header.column.getIsSorted() as string] ?? null}
-                    </div>
+                    </button>
                     {columnMeta?.filterable && filterType ? (
                       <ColumnFilterControl
                         columnId={header.column.id}
                         filterType={filterType}
-                        condition={
-                          columnFilters[header.column.id]?.condition ?? null
-                        }
-                        onChange={(condition) =>
+                        spec={columnFilters[header.column.id]?.spec ?? null}
+                        onChange={(spec) =>
                           handleColumnFilterChange(
                             header.column.id,
                             filterType,
-                            condition
+                            spec
                           )
                         }
                         suggestions={filterSuggestions}
                         onOpenChange={onFilterColumnChange}
                       />
                     ) : null}
+                    {/* Pointer-only drag handle — column widths also reset
+                        from the header menu, so nothing is keyboard-only here. */}
                     <div
                       className={clsx(
                         styles.resizer,
                         header.column.getIsResizing() && styles.resizerActive
                       )}
+                      role="presentation"
                       onMouseDown={header.getResizeHandler()}
                       onTouchStart={header.getResizeHandler()}
                       onDoubleClick={() =>

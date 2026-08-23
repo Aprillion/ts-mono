@@ -1,7 +1,9 @@
-import type { Event } from "@tsmono/inspect-common/types";
+import { normalizeEvents } from "@tsmono/inspect-common/normalize";
 import { expandEvents } from "@tsmono/inspect-common/utils";
 
 import type { ScannerInputResponse, Transcript } from "../types/api-types";
+
+import { resolveAttachments } from "./attachmentsHelpers";
 
 /**
  * Expand condensed events in a scan result input.
@@ -14,17 +16,35 @@ export function expandInputEvents(
 ): ScannerInputResponse["input"] {
   if (!inputData) return input;
 
+  // EventsData is `additionalProperties: true`, so `attachments` isn't part
+  // of its generated type; narrow just enough to read it back out.
+  const attachments = (inputData as { attachments?: Record<string, string> })
+    .attachments;
+  const withAttachmentsResolved = (value: ScannerInputResponse["input"]) =>
+    attachments && Object.keys(attachments).length > 0
+      ? resolveAttachments(value, attachments)
+      : value;
+
   if (inputType === "transcript") {
     const transcript = input as Transcript;
-    const expanded = expandEvents(transcript.events, inputData);
-    return expanded === transcript.events
-      ? input
-      : { ...transcript, events: expanded };
+    // Boundary normalization (#555): transcripts can come from old logs
+    // whose events omit fields the types declare required.
+    const expanded = expandEvents(
+      normalizeEvents(transcript.events),
+      inputData
+    );
+    const result =
+      expanded === transcript.events
+        ? input
+        : { ...transcript, events: expanded };
+    return withAttachmentsResolved(result);
   }
 
   if (inputType === "events") {
-    return expandEvents(input as Event[], inputData);
+    return withAttachmentsResolved(
+      expandEvents(normalizeEvents(input), inputData)
+    );
   }
 
-  return input;
+  return withAttachmentsResolved(input);
 }

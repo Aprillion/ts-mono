@@ -18,7 +18,7 @@
     }
   },
   "scripts": {
-    "lint": "eslint . --max-warnings 0",
+    "lint": "TSMONO_TYPED_LINT=1 eslint . --max-warnings 0",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
@@ -28,9 +28,9 @@
     "@tsmono/eslint-config": "workspace:*",
     "@tsmono/tsconfig": "workspace:*",
     "@typescript/native": "npm:typescript@^7.0.2",
-    "eslint": "^9.39.5",
+    "eslint": "^10.7.0",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
-    "typescript-eslint": "^8.65.0",
+    "typescript-eslint": "^8.67.0",
     "vitest": "^4.1.10"
   }
 }

@@ -1,10 +1,11 @@
 import clsx from "clsx";
 import { FC, useCallback, useEffect, useMemo, useState } from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate } from "react-router";
 
 import { EvalSet } from "@tsmono/inspect-common/types";
 import { ErrorPanel, ProgressBar } from "@tsmono/react/components";
 import { useProperty } from "@tsmono/react/hooks";
+import { directoryRelativeUrl, join } from "@tsmono/util";
 
 import { useLogDir } from "../../app_config";
 import {
@@ -16,7 +17,6 @@ import { setDocumentTitle } from "../../state/actions";
 import { useLogsListing } from "../../state/hooks";
 import { useStore } from "../../state/store";
 import { useUserSettings } from "../../state/userSettings";
-import { directoryRelativeUrl, join } from "../../utils/uri";
 import { ApplicationIcons } from "../appearance/icons";
 import { FlowButton } from "../flow/FlowButton";
 import { useFlowQuery } from "../flow/hooks";
@@ -81,6 +81,7 @@ export const LogsPanel: FC<LogsPanelProps> = ({
   // a different scope (different dir), so each folder also remembers its
   // own state. `undefined` until logDir hydrates so we never write under
   // a half-initialized scope.
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
   const scopeKey = logDir === undefined ? undefined : `${mode}::${currentDir}`;
 
   // Cache identity of the row universe: the listing/overview queries depend

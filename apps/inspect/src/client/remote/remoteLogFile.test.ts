@@ -15,21 +15,29 @@
 
 import { describe, expect, test } from "vitest";
 
-import { headerFromLogStart, LogStart } from "./remoteLogFile";
+import { testEvalPlan, testEvalSpec } from "@tsmono/inspect-common/testing";
+import type { EvalSpec } from "@tsmono/inspect-common/types";
 
-const baseEval = {
-  // EvalSpec has more fields, but the helper only touches `tags` and
-  // `metadata`; we cast as needed to avoid building the full shape.
+import { SampleSummary } from "../api/types";
+
+import {
+  dedupeSummaries,
+  headerFromLogStart,
+  LogStart,
+  readJournalConfigUpdatesFrom,
+} from "./remoteLogFile";
+
+const baseEval = testEvalSpec({
   task: "test_task",
   task_id: "task_id",
   created: "2026-05-20T00:00:00Z",
-};
+});
 
-function makeStart(eval_: Record<string, unknown>): LogStart {
+function makeStart(eval_: EvalSpec): LogStart {
   return {
     version: 2,
-    eval: eval_ as unknown as LogStart["eval"],
-    plan: {} as LogStart["plan"],
+    eval: eval_,
+    plan: testEvalPlan(),
   };
 }
 
@@ -63,5 +71,110 @@ describe("headerFromLogStart", () => {
     // rely on stable references.
     expect(header.eval).toBe(start.eval);
     expect(header.plan).toBe(start.plan);
+  });
+});
+
+describe("readJournalConfigUpdatesFrom", () => {
+  const prefix = "_journal/config_updates/";
+
+  // A minimally-valid ConfigUpdate payload carrying the entry name as its
+  // change name, so ordering assertions can read it back out.
+  const updateFor = (name: string) => ({
+    changes: [{ name, config: "eval", value: 1 }],
+    scope: "task",
+    provenance: { timestamp: "", author: "", metadata: {} },
+  });
+  const changeNames = (updates: { changes: { name: string }[] }[]) =>
+    updates.map((update) => update.changes[0]?.name);
+
+  test("orders entries numerically, not lexicographically", async () => {
+    const names = [`${prefix}10.json`, `${prefix}2.json`, `${prefix}1.json`];
+    const reads: string[] = [];
+    const updates = await readJournalConfigUpdatesFrom(names, (name) => {
+      reads.push(name);
+      return Promise.resolve(updateFor(name));
+    });
+    expect(reads).toEqual([
+      `${prefix}1.json`,
+      `${prefix}2.json`,
+      `${prefix}10.json`,
+    ]);
+    expect(updates).toHaveLength(3);
+  });
+
+  test("ignores non-integer and out-of-prefix names", async () => {
+    const names = [
+      `${prefix}notes.json`,
+      `${prefix}1.json`,
+      "_journal/summaries/1.json",
+      `${prefix}2.txt`,
+    ];
+    const updates = await readJournalConfigUpdatesFrom(names, (name) =>
+      Promise.resolve(updateFor(name))
+    );
+    expect(changeNames(updates)).toEqual([`${prefix}1.json`]);
+  });
+
+  test("stops at the first failed read, not splicing around it", async () => {
+    // The fold is last-wins: a truncated tail is safe, a gap is not.
+    const names = [`${prefix}1.json`, `${prefix}2.json`, `${prefix}3.json`];
+    const updates = await readJournalConfigUpdatesFrom(names, (name) =>
+      name.endsWith("2.json")
+        ? Promise.reject(new Error("corrupt entry"))
+        : Promise.resolve(updateFor(name))
+    );
+    expect(changeNames(updates)).toEqual([`${prefix}1.json`]);
+  });
+
+  test("drops malformed entries instead of poisoning the fold", async () => {
+    const names = [`${prefix}1.json`, `${prefix}2.json`];
+    const updates = await readJournalConfigUpdatesFrom(names, (name) =>
+      Promise.resolve(
+        name.endsWith("1.json") ? { changes: "not-an-array" } : updateFor(name)
+      )
+    );
+    expect(changeNames(updates)).toEqual([`${prefix}2.json`]);
+  });
+
+  test("returns empty when no journal entries exist", async () => {
+    const updates = await readJournalConfigUpdatesFrom([], () =>
+      Promise.resolve({})
+    );
+    expect(updates).toEqual([]);
+  });
+});
+
+function makeSummary(
+  id: number | string,
+  epoch: number,
+  error?: string
+): SampleSummary {
+  // SampleSummary has more fields; the helper only touches id / epoch.
+  return { id, epoch, error } as SampleSummary;
+}
+
+describe("dedupeSummaries", () => {
+  test("keeps the last row per (id, epoch)", () => {
+    // a requeued sample journals its superseded prior attempt and, in a
+    // later journal file, its re-run — the re-run's row must win
+    const deduped = dedupeSummaries([
+      makeSummary("flaky", 1, "boom"),
+      makeSummary("steady", 1),
+      makeSummary("flaky", 1),
+    ]);
+    expect(deduped).toEqual([
+      makeSummary("flaky", 1),
+      makeSummary("steady", 1),
+    ]);
+  });
+
+  test("treats epochs of the same sample as distinct rows", () => {
+    const rows = [makeSummary("s1", 1), makeSummary("s1", 2)];
+    expect(dedupeSummaries(rows)).toEqual(rows);
+  });
+
+  test("does not conflate numeric and string ids", () => {
+    const rows = [makeSummary(1, 1), makeSummary("1", 1)];
+    expect(dedupeSummaries(rows)).toEqual(rows);
   });
 });

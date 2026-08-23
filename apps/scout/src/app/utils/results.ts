@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unnecessary-condition */
 import {
   isArrayValue,
   isBooleanValue,
@@ -173,7 +174,7 @@ export const sortByColumns = (
   sortColumns: SortColumn[]
 ): number => {
   for (const sortCol of sortColumns) {
-    let comparison = 0;
+    let comparison: number;
 
     switch (sortCol.column.toLowerCase()) {
       case "result":

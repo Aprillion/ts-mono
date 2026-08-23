@@ -16,7 +16,7 @@ import type {
 import { ExpandablePanel } from "@tsmono/react/components";
 import type { MarkdownReference } from "@tsmono/react/components";
 import { usePrismHighlight } from "@tsmono/react/hooks";
-import { isJson } from "@tsmono/util";
+import { isJson, isRenderableImageSource } from "@tsmono/util";
 
 import {
   useDisplayMode,
@@ -27,7 +27,6 @@ import { MediaReference } from "../media/MediaReference";
 import {
   audioMimeTypeForFormat,
   isRenderableAudioSource,
-  isRenderableImageSource,
   isRenderableVideoSource,
   videoMimeTypeForFormat,
 } from "../media/mediaSource";
@@ -103,6 +102,7 @@ export const MessageContent: FC<MessageContentProps> = ({
           references
         );
       } else {
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
         if (content) {
           const renderer = messageRenderers[content.type];
           if (renderer) {
@@ -260,6 +260,9 @@ const messageRenderers: Record<string, MessageRenderer> = {
         return <MediaReference source={c.audio} key={key} />;
       }
       return (
+        // Log content carries no caption track and none can be synthesised
+        // here; the audio is model input being replayed, not authored media.
+        // eslint-disable-next-line jsx-a11y/media-has-caption
         <audio controls key={key}>
           <source src={c.audio} type={audioMimeTypeForFormat(c.format)} />
         </audio>
@@ -273,6 +276,7 @@ const messageRenderers: Record<string, MessageRenderer> = {
         return <MediaReference source={c.video} key={key} />;
       }
       return (
+        // eslint-disable-next-line jsx-a11y/media-has-caption -- see audio above
         <video width="500" height="375" controls key={key}>
           <source src={c.video} type={videoMimeTypeForFormat(c.format)} />
         </video>

@@ -8,10 +8,24 @@
 
 import { describe, expect, it } from "vitest";
 
+import {
+  testAnchorEvent,
+  testAssistantMessage,
+  testBranchEvent,
+  testChatCompletionChoice,
+  testModelEvent,
+  testModelOutput,
+  testModelUsage,
+  testSpanBeginEvent,
+  testSpanEndEvent,
+  testStepEvent,
+  testTimeline,
+  testTimelineEvent,
+  testTimelineSpan,
+  testUserMessage,
+} from "@tsmono/inspect-common/testing";
 import type {
   Event,
-  Timeline as ServerTimeline,
-  TimelineEvent as ServerTimelineEvent,
   TimelineSpan as ServerTimelineSpan,
 } from "@tsmono/inspect-common/types";
 
@@ -30,72 +44,33 @@ import {
 // Helpers
 // =============================================================================
 
-function makeEvent(
+const BASE = new Date("2025-01-15T10:00:00Z").getTime();
+
+const iso = (sec: number) => new Date(BASE + sec * 1000).toISOString();
+
+function makeModelEvent(
   uuid: string,
-  type: string,
   startSec: number,
-  endSec?: number,
-  tokens?: number
+  endSec: number,
+  tokens: number
 ): Event {
-  const base = new Date("2025-01-15T10:00:00Z").getTime();
-  return {
-    event: type,
+  return testModelEvent({
     uuid,
-    timestamp: new Date(base + startSec * 1000).toISOString(),
-    completed: endSec
-      ? new Date(base + endSec * 1000).toISOString()
-      : undefined,
+    timestamp: iso(startSec),
+    completed: iso(endSec),
     working_start: startSec,
-    pending: false,
-    metadata: null,
-    ...(type === "model"
-      ? {
-          model: "test-model",
-          output: {
-            usage: {
-              input_tokens: tokens ? Math.floor(tokens * 0.6) : 0,
-              output_tokens: tokens ? tokens - Math.floor(tokens * 0.6) : 0,
-              total_tokens: tokens ?? 0,
-              input_tokens_cache_read: null,
-              input_tokens_cache_write: null,
-              reasoning_tokens: null,
-              total_cost: null,
-            },
-          },
-        }
-      : {}),
-  } as Event;
+    output: testModelOutput({
+      usage: testModelUsage({
+        input_tokens: Math.floor(tokens * 0.6),
+        output_tokens: tokens - Math.floor(tokens * 0.6),
+        total_tokens: tokens,
+      }),
+    }),
+  });
 }
 
-function makeServerEvent(uuid: string): ServerTimelineEvent {
-  return { type: "event", event: uuid } as unknown as ServerTimelineEvent;
-}
-
-function makeServerSpan(
-  overrides: Partial<ServerTimelineSpan> & { id: string; name: string }
-): ServerTimelineSpan {
-  return {
-    type: "span",
-    span_type: null,
-    content: [],
-    branches: [],
-    branched_from: null,
-    description: null,
-    utility: false,
-    tool_invoked: false,
-    agent_result: null,
-    outline: null,
-    ...overrides,
-  };
-}
-
-function makeServerTimeline(root: ServerTimelineSpan): ServerTimeline {
-  return {
-    name: "test",
-    description: "test timeline",
-    root,
-  };
-}
+const makeServerTimeline = (root: ServerTimelineSpan) =>
+  testTimeline({ name: "test", description: "test timeline", root });
 
 // =============================================================================
 // Tests
@@ -105,15 +80,18 @@ describe("convertServerTimeline", () => {
   describe("UUID resolution", () => {
     it("resolves event UUIDs to full Event objects", () => {
       const events = [
-        makeEvent("evt-1", "model", 0, 10, 100),
-        makeEvent("evt-2", "model", 10, 20, 200),
+        makeModelEvent("evt-1", 0, 10, 100),
+        makeModelEvent("evt-2", 10, 20, 200),
       ];
 
       const server = makeServerTimeline(
-        makeServerSpan({
+        testTimelineSpan({
           id: "root",
           name: "main",
-          content: [makeServerEvent("evt-1"), makeServerEvent("evt-2")],
+          content: [
+            testTimelineEvent({ event: "evt-1" }),
+            testTimelineEvent({ event: "evt-2" }),
+          ],
         })
       );
 
@@ -132,13 +110,16 @@ describe("convertServerTimeline", () => {
     });
 
     it("filters out events with missing UUIDs", () => {
-      const events = [makeEvent("evt-1", "model", 0, 10, 100)];
+      const events = [makeModelEvent("evt-1", 0, 10, 100)];
 
       const server = makeServerTimeline(
-        makeServerSpan({
+        testTimelineSpan({
           id: "root",
           name: "main",
-          content: [makeServerEvent("evt-1"), makeServerEvent("evt-missing")],
+          content: [
+            testTimelineEvent({ event: "evt-1" }),
+            testTimelineEvent({ event: "evt-missing" }),
+          ],
         })
       );
 
@@ -152,10 +133,10 @@ describe("convertServerTimeline", () => {
 
     it("handles empty events array", () => {
       const server = makeServerTimeline(
-        makeServerSpan({
+        testTimelineSpan({
           id: "root",
           name: "main",
-          content: [makeServerEvent("evt-1")],
+          content: [testTimelineEvent({ event: "evt-1" })],
         })
       );
 
@@ -168,28 +149,28 @@ describe("convertServerTimeline", () => {
   describe("nested spans", () => {
     it("converts nested span hierarchy", () => {
       const events = [
-        makeEvent("evt-1", "model", 0, 10, 100),
-        makeEvent("evt-2", "model", 10, 20, 200),
-        makeEvent("evt-3", "model", 20, 30, 300),
+        makeModelEvent("evt-1", 0, 10, 100),
+        makeModelEvent("evt-2", 10, 20, 200),
+        makeModelEvent("evt-3", 20, 30, 300),
       ];
 
       const server = makeServerTimeline(
-        makeServerSpan({
+        testTimelineSpan({
           id: "root",
           name: "main",
           content: [
-            makeServerEvent("evt-1"),
-            makeServerSpan({
+            testTimelineEvent({ event: "evt-1" }),
+            testTimelineSpan({
               id: "child",
               name: "explore",
               span_type: "agent",
               content: [
-                makeServerEvent("evt-2"),
-                makeServerSpan({
+                testTimelineEvent({ event: "evt-2" }),
+                testTimelineSpan({
                   id: "grandchild",
                   name: "build",
                   span_type: "agent",
-                  content: [makeServerEvent("evt-3")],
+                  content: [testTimelineEvent({ event: "evt-3" })],
                 }),
               ],
             }),
@@ -216,21 +197,21 @@ describe("convertServerTimeline", () => {
     });
 
     it("preserves span properties through conversion", () => {
-      const events = [makeEvent("evt-1", "model", 0, 10, 100)];
+      const events = [makeModelEvent("evt-1", 0, 10, 100)];
 
       const server = makeServerTimeline(
-        makeServerSpan({
+        testTimelineSpan({
           id: "root",
           name: "main",
           content: [
-            makeServerSpan({
+            testTimelineSpan({
               id: "agent-1",
               name: "helper",
               span_type: "agent",
               utility: true,
               description: "A helper agent",
               agent_result: "Done helping",
-              content: [makeServerEvent("evt-1")],
+              content: [testTimelineEvent({ event: "evt-1" })],
             }),
           ],
         })
@@ -248,18 +229,18 @@ describe("convertServerTimeline", () => {
     });
 
     it("filters out empty child spans (all events missing)", () => {
-      const events = [makeEvent("evt-1", "model", 0, 10, 100)];
+      const events = [makeModelEvent("evt-1", 0, 10, 100)];
 
       const server = makeServerTimeline(
-        makeServerSpan({
+        testTimelineSpan({
           id: "root",
           name: "main",
           content: [
-            makeServerEvent("evt-1"),
-            makeServerSpan({
+            testTimelineEvent({ event: "evt-1" }),
+            testTimelineSpan({
               id: "empty",
               name: "ghost",
-              content: [makeServerEvent("evt-missing")],
+              content: [testTimelineEvent({ event: "evt-missing" })],
             }),
           ],
         })
@@ -276,28 +257,28 @@ describe("convertServerTimeline", () => {
   describe("branches", () => {
     it("converts branches with branchedFrom references", () => {
       const events = [
-        makeEvent("evt-1", "model", 0, 10, 100),
-        makeEvent("evt-2", "model", 10, 20, 200),
-        makeEvent("evt-3", "model", 20, 30, 300),
+        makeModelEvent("evt-1", 0, 10, 100),
+        makeModelEvent("evt-2", 10, 20, 200),
+        makeModelEvent("evt-3", 20, 30, 300),
       ];
 
       const server = makeServerTimeline(
-        makeServerSpan({
+        testTimelineSpan({
           id: "root",
           name: "main",
-          content: [makeServerEvent("evt-1")],
+          content: [testTimelineEvent({ event: "evt-1" })],
           branches: [
-            makeServerSpan({
+            testTimelineSpan({
               id: "branch-1",
               name: "branch",
               branched_from: "msg-123",
-              content: [makeServerEvent("evt-2")],
+              content: [testTimelineEvent({ event: "evt-2" })],
             }),
-            makeServerSpan({
+            testTimelineSpan({
               id: "branch-2",
               name: "branch",
               branched_from: "msg-456",
-              content: [makeServerEvent("evt-3")],
+              content: [testTimelineEvent({ event: "evt-3" })],
             }),
           ],
         })
@@ -313,25 +294,25 @@ describe("convertServerTimeline", () => {
     });
 
     it("filters out branch spans where all events are missing", () => {
-      const events = [makeEvent("evt-1", "model", 0, 10, 100)];
+      const events = [makeModelEvent("evt-1", 0, 10, 100)];
 
       const server = makeServerTimeline(
-        makeServerSpan({
+        testTimelineSpan({
           id: "root",
           name: "main",
-          content: [makeServerEvent("evt-1")],
+          content: [testTimelineEvent({ event: "evt-1" })],
           branches: [
-            makeServerSpan({
+            testTimelineSpan({
               id: "branch-good",
               name: "branch",
               branched_from: "msg-1",
-              content: [makeServerEvent("evt-1")],
+              content: [testTimelineEvent({ event: "evt-1" })],
             }),
-            makeServerSpan({
+            testTimelineSpan({
               id: "branch-empty",
               name: "branch",
               branched_from: "msg-2",
-              content: [makeServerEvent("evt-missing")],
+              content: [testTimelineEvent({ event: "evt-missing" })],
             }),
           ],
         })
@@ -345,25 +326,25 @@ describe("convertServerTimeline", () => {
 
     it("handles nested branches within child spans", () => {
       const events = [
-        makeEvent("evt-1", "model", 0, 10, 100),
-        makeEvent("evt-2", "model", 10, 20, 200),
+        makeModelEvent("evt-1", 0, 10, 100),
+        makeModelEvent("evt-2", 10, 20, 200),
       ];
 
       const server = makeServerTimeline(
-        makeServerSpan({
+        testTimelineSpan({
           id: "root",
           name: "main",
           content: [
-            makeServerSpan({
+            testTimelineSpan({
               id: "child",
               name: "agent",
-              content: [makeServerEvent("evt-1")],
+              content: [testTimelineEvent({ event: "evt-1" })],
               branches: [
-                makeServerSpan({
+                testTimelineSpan({
                   id: "child-branch",
                   name: "branch",
                   branched_from: "msg-nested",
-                  content: [makeServerEvent("evt-2")],
+                  content: [testTimelineEvent({ event: "evt-2" })],
                 }),
               ],
             }),
@@ -382,15 +363,18 @@ describe("convertServerTimeline", () => {
   describe("computed properties", () => {
     it("computes timing from resolved events", () => {
       const events = [
-        makeEvent("evt-1", "model", 0, 10, 100),
-        makeEvent("evt-2", "model", 20, 30, 200),
+        makeModelEvent("evt-1", 0, 10, 100),
+        makeModelEvent("evt-2", 20, 30, 200),
       ];
 
       const server = makeServerTimeline(
-        makeServerSpan({
+        testTimelineSpan({
           id: "root",
           name: "main",
-          content: [makeServerEvent("evt-1"), makeServerEvent("evt-2")],
+          content: [
+            testTimelineEvent({ event: "evt-1" }),
+            testTimelineEvent({ event: "evt-2" }),
+          ],
         })
       );
 
@@ -403,15 +387,18 @@ describe("convertServerTimeline", () => {
 
     it("computes token totals from resolved events", () => {
       const events = [
-        makeEvent("evt-1", "model", 0, 10, 100),
-        makeEvent("evt-2", "model", 10, 20, 200),
+        makeModelEvent("evt-1", 0, 10, 100),
+        makeModelEvent("evt-2", 10, 20, 200),
       ];
 
       const server = makeServerTimeline(
-        makeServerSpan({
+        testTimelineSpan({
           id: "root",
           name: "main",
-          content: [makeServerEvent("evt-1"), makeServerEvent("evt-2")],
+          content: [
+            testTimelineEvent({ event: "evt-1" }),
+            testTimelineEvent({ event: "evt-2" }),
+          ],
         })
       );
 
@@ -478,10 +465,16 @@ describe("convertServerTimeline", () => {
   });
 
   describe("isEmptyBranch", () => {
-    const anchor = new TimelineEvent(makeEvent("a", "anchor", 0));
-    const branchEvt = new TimelineEvent(makeEvent("b", "branch", 0));
-    const stepEvt = new TimelineEvent(makeEvent("s", "step", 0));
-    const model = new TimelineEvent(makeEvent("m", "model", 0, 1, 10));
+    const anchor = new TimelineEvent(
+      testAnchorEvent({ uuid: "a", timestamp: iso(0), working_start: 0 })
+    );
+    const branchEvt = new TimelineEvent(
+      testBranchEvent({ uuid: "b", timestamp: iso(0), working_start: 0 })
+    );
+    const stepEvt = new TimelineEvent(
+      testStepEvent({ uuid: "s", timestamp: iso(0), working_start: 0 })
+    );
+    const model = new TimelineEvent(makeModelEvent("m", 0, 1, 10));
 
     it("returns true for an empty span", () => {
       const span = new TimelineSpan({
@@ -546,10 +539,16 @@ describe("convertServerTimeline", () => {
   });
 
   describe("filterEmptyBranches", () => {
-    const anchor = new TimelineEvent(makeEvent("a", "anchor", 0));
-    const stepEvt = new TimelineEvent(makeEvent("s", "step", 0));
-    const branchEvt = new TimelineEvent(makeEvent("b", "branch", 0));
-    const model = new TimelineEvent(makeEvent("m", "model", 0, 1, 10));
+    const anchor = new TimelineEvent(
+      testAnchorEvent({ uuid: "a", timestamp: iso(0), working_start: 0 })
+    );
+    const stepEvt = new TimelineEvent(
+      testStepEvent({ uuid: "s", timestamp: iso(0), working_start: 0 })
+    );
+    const branchEvt = new TimelineEvent(
+      testBranchEvent({ uuid: "b", timestamp: iso(0), working_start: 0 })
+    );
+    const model = new TimelineEvent(makeModelEvent("m", 0, 1, 10));
 
     function branch(
       id: string,
@@ -629,13 +628,13 @@ describe("convertServerTimeline", () => {
 
   describe("outline", () => {
     it("preserves outline data through conversion", () => {
-      const events = [makeEvent("evt-1", "model", 0, 10, 100)];
+      const events = [makeModelEvent("evt-1", 0, 10, 100)];
 
       const server = makeServerTimeline(
-        makeServerSpan({
+        testTimelineSpan({
           id: "root",
           name: "main",
-          content: [makeServerEvent("evt-1")],
+          content: [testTimelineEvent({ event: "evt-1" })],
           outline: {
             nodes: [{ event: "evt-1", children: [] }],
           },
@@ -709,48 +708,43 @@ describe("utility wrapper ids", () => {
     const ts = () =>
       new Date(Date.UTC(2026, 0, 1, 0, 0, ++clock)).toISOString();
     const warmup = () =>
-      ({
-        event: "model",
+      testModelEvent({
         uuid: null,
         timestamp: ts(),
         completed: ts(),
-        working_start: 0,
         pending: false,
         metadata: null,
         span_id: "monitor",
         model: "mockllm/model",
         config: { max_tokens: 1 },
-        input: [{ role: "user", content: "warmup" }],
-        output: {
+        input: [testUserMessage({ content: "warmup" })],
+        output: testModelOutput({
           choices: [
-            {
-              message: { role: "assistant", content: "w" },
+            testChatCompletionChoice({
+              message: testAssistantMessage({ content: "w" }),
               stop_reason: "max_tokens",
-            },
+            }),
           ],
-          usage: { input_tokens: 5, output_tokens: 1 },
-        },
-      }) as unknown as Event;
-    const spanEvt = (evt: object) =>
-      ({
-        timestamp: ts(),
-        working_start: 0,
-        pending: false,
-        metadata: null,
-        uuid: null,
-        ...evt,
-      }) as unknown as Event;
+          usage: testModelUsage({ input_tokens: 5, output_tokens: 1 }),
+        }),
+      });
+    const spanMeta = () => ({
+      timestamp: ts(),
+      pending: false,
+      metadata: null,
+      uuid: null,
+    });
 
     const timeline = buildTimeline([
-      spanEvt({
-        event: "span_begin",
+      testSpanBeginEvent({
+        ...spanMeta(),
         id: "solvers",
         name: "solvers",
         type: "solvers",
         parent_id: null,
       }),
-      spanEvt({
-        event: "span_begin",
+      testSpanBeginEvent({
+        ...spanMeta(),
         id: "monitor",
         name: "monitor",
         type: "agent",
@@ -758,8 +752,8 @@ describe("utility wrapper ids", () => {
       }),
       warmup(),
       warmup(),
-      spanEvt({ event: "span_end", id: "monitor" }),
-      spanEvt({ event: "span_end", id: "solvers" }),
+      testSpanEndEvent({ ...spanMeta(), id: "monitor" }),
+      testSpanEndEvent({ ...spanMeta(), id: "solvers" }),
     ]);
 
     const wrappers = timeline.root.content.filter(
