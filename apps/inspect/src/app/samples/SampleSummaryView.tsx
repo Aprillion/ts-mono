@@ -95,9 +95,11 @@ const resolveSample = (
       ? sampleDescriptor.selectedScorerDescriptor(sample)?.answer()
       : undefined;
   const limit = isEvalSample(sample) ? sample.limit?.type : undefined;
+  // resolved off the same branch as `limit` above — a SampleSummary yields no
+  // limit here, so a reason read from one could never render
   const limit_reason = isEvalSample(sample)
     ? (sample.limit?.reason ?? undefined)
-    : sample.limit_reason;
+    : undefined;
   const working_time = isEvalSample(sample) ? sample.working_time : undefined;
   const total_time = isEvalSample(sample) ? sample.total_time : undefined;
   const cancelled = isCancelled(sample);
