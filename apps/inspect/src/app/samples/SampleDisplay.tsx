@@ -24,6 +24,7 @@ import {
   RecordTree,
 } from "@tsmono/inspect-components/content";
 import {
+  dynamicDefaultExcludeEvents,
   eventsToStr,
   type TranscriptLayoutRightRailProps,
 } from "@tsmono/inspect-components/transcript";
@@ -240,6 +241,14 @@ export const SampleDisplay: FC<SampleDisplayProps> = ({
   const selectedSampleHandle = useStore(
     (state) => state.log.selectedSampleHandle
   );
+
+  // Dynamic Default event-filter exclusions: store events with rich renderers
+  // (e.g. human-baseline terminal sessions) are visible by default. Chunked
+  // transcripts stream events lazily, so they keep the static defaults.
+  const defaultExcludeEvents = useMemo(
+    () => dynamicDefaultExcludeEvents(sampleEvents),
+    [sampleEvents]
+  );
   const messagesTabOpen = effectiveSelectedTab === kSampleMessagesTabId;
   const sampleDetailNavigation = useSampleDetailNavigation();
   const sampleMessages = useSampleMessages(
@@ -393,7 +402,7 @@ export const SampleDisplay: FC<SampleDisplayProps> = ({
   }, [collapsedMode, setCollapsedMode]);
 
   const { isDebugFilter, isDefaultFilter, isNoneFilter } =
-    useTranscriptFilter();
+    useTranscriptFilter(defaultExcludeEvents);
 
   const api = getApi();
   const downloadFiles = useStore((state) => state.capabilities.downloadFiles);
@@ -850,6 +859,7 @@ export const SampleDisplay: FC<SampleDisplayProps> = ({
                 showing={isShowing}
                 setShowing={setShowing}
                 positionEl={filterButtonEl}
+                defaultExcludeEvents={defaultExcludeEvents}
               />
 
               {sampleData.chunked ? (
@@ -888,6 +898,7 @@ export const SampleDisplay: FC<SampleDisplayProps> = ({
                     backfilling={backfilling}
                     scrollToTopOnFinish={scrollToTopOnFinish}
                     events={sampleEvents}
+                    defaultExcludeEvents={defaultExcludeEvents}
                     timelines={sample?.timelines ?? undefined}
                     eventNodeContext={transcriptEventNodeContext}
                     initialEventId={sampleDetailNavigation.event}
