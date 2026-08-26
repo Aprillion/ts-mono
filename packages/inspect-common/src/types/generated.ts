@@ -1661,6 +1661,8 @@ export interface components {
             input: string | (components["schemas"]["ChatMessageSystem"] | components["schemas"]["ChatMessageUser"] | components["schemas"]["ChatMessageAssistant"] | components["schemas"]["ChatMessageTool"])[];
             invalidation?: components["schemas"]["ProvenanceData"] | null;
             limit?: components["schemas"]["EvalSampleLimit"] | null;
+            /** Message Limit */
+            message_limit?: number | null;
             /** Messages */
             messages: (components["schemas"]["ChatMessageSystem"] | components["schemas"]["ChatMessageUser"] | components["schemas"]["ChatMessageAssistant"] | components["schemas"]["ChatMessageTool"])[];
             /** Metadata */
@@ -1693,6 +1695,8 @@ export interface components {
             };
             /** Target */
             target: string | string[];
+            /** Time Limit */
+            time_limit?: number | null;
             /** Timelines */
             timelines?: components["schemas"]["Timeline"][] | null;
             /** Token Limit */
@@ -1789,6 +1793,8 @@ export interface components {
             limit_reason?: string | null;
             /** Message Count */
             message_count?: number | null;
+            /** Message Limit */
+            message_limit?: number | null;
             /** Metadata */
             metadata: {
                 [key: string]: unknown;
@@ -1813,6 +1819,8 @@ export interface components {
             started_at?: string | null;
             /** Target */
             target: string | string[];
+            /** Time Limit */
+            time_limit?: number | null;
             /** Token Limit */
             token_limit?: number | null;
             /** Token Limit Type */
