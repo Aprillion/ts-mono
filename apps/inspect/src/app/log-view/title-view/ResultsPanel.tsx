@@ -12,7 +12,7 @@ import {
   expandGroupedMetrics,
   metricDisplayName,
 } from "../../../scoring/metrics";
-import { groupScorers } from "../../../scoring/scores";
+import { groupScorers, leadWithMetricColumn } from "../../../scoring/scores";
 import { MetricSummary, ScoreSummary } from "../../../scoring/types";
 
 import styles from "./ResultsPanel.module.css";
@@ -20,6 +20,7 @@ import { ScoreGrid } from "./ScoreGrid";
 import { UnscoredSamples } from "./UnscoredSamplesView";
 
 const kMaxPrimaryScoreRows = 3;
+const kMaxPrimaryMetricColumns = 5;
 
 export const displayScorersFromRunningMetrics = (metrics?: RunningMetric[]) => {
   if (!metrics) {
@@ -95,15 +96,18 @@ export const ResultsPanel: FC<ResultsPanelProps> = ({
     expandedScorers.length === 1 ? expandedScorers[0] : undefined;
   if (onlyScorer) {
     const showReducer = !!onlyScorer.reducer;
+    // lead with the headline so the column cap below can't drop it
     const metrics = leadWith(
       onlyScorer.metrics,
       onlyScorer.metrics.findIndex((metric) => metric.headline)
     );
+    const primaryMetrics = metrics.slice(0, kMaxPrimaryMetricColumns);
+    const showMore = primaryMetrics.length < metrics.length;
     const unscoredSamples = onlyScorer.unscoredSamples || 0;
     const scoredSamples = onlyScorer.scoredSamples || 0;
-    return (
+    const metricsRow = (
       <div className={styles.simpleMetricsRows}>
-        {metrics.map((metric, i) => {
+        {primaryMetrics.map((metric, i) => {
           return (
             <VerticalMetric
               key={`simple-metric-${i}`}
@@ -117,6 +121,21 @@ export const ResultsPanel: FC<ResultsPanelProps> = ({
           );
         })}
       </div>
+    );
+    // the wrapper (and its margin) exists to seat the "All scoring..." link;
+    // when nothing is truncated, render exactly what pre-cap versions did
+    return showMore ? (
+      <div className={styles.metricsSummary}>
+        {metricsRow}
+        <ScoringDetail
+          grouped={groupScorers(expandedScorers)}
+          showReducer={showReducer}
+          showing={showing}
+          setShowing={setShowing}
+        />
+      </div>
+    ) : (
+      metricsRow
     );
   } else {
     const showReducer =
@@ -170,6 +189,31 @@ export const ResultsPanel: FC<ResultsPanelProps> = ({
       }
     }
 
+    if (
+      primaryResults.some(
+        (score) => score.metrics.length > kMaxPrimaryMetricColumns
+      )
+    ) {
+      // scores in a group share an ordered metric signature, so fronting the
+      // same column index in every row keeps the grid's columns aligned while
+      // ensuring the cap can't drop the headline
+      const headlineColumn = primaryResults.reduce(
+        (found, score) =>
+          found !== -1
+            ? found
+            : score.metrics.findIndex((metric) => metric.headline),
+        -1
+      );
+      primaryResults = primaryResults.map((score) => ({
+        ...score,
+        metrics: leadWithMetricColumn(score.metrics, headlineColumn).slice(
+          0,
+          kMaxPrimaryMetricColumns
+        ),
+      }));
+      showMore = true;
+    }
+
     return (
       <div className={clsx(styles.metricsSummary)}>
         <ScoreGrid
@@ -178,41 +222,60 @@ export const ResultsPanel: FC<ResultsPanelProps> = ({
           compact
         />
         {showMore ? (
-          <>
-            <Modal
-              id="results-metrics"
-              show={showing}
-              onHide={() => setShowing(false)}
-              title={"Scoring Detail"}
-              width="min(1000px, 90vw)"
-              overflow="hidden"
-              padded={false}
-              className={styles.scoringDetailModal}
-              footer={
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => setShowing(false)}
-                >
-                  Close
-                </button>
-              }
-            >
-              <ScoreGrid scoreGroups={grouped} showReducer={showReducer} />
-            </Modal>
-            <LinkButton
-              className={styles.moreButton}
-              text={"All scoring..."}
-              onClick={() => {
-                setShowing(true);
-              }}
-            />
-          </>
+          <ScoringDetail
+            grouped={grouped}
+            showReducer={showReducer}
+            showing={showing}
+            setShowing={setShowing}
+          />
         ) : undefined}
       </div>
     );
   }
 };
+
+interface ScoringDetailProps {
+  grouped: ScoreSummary[][];
+  showReducer: boolean;
+  showing: boolean;
+  setShowing: (showing: boolean) => void;
+}
+
+const ScoringDetail: FC<ScoringDetailProps> = ({
+  grouped,
+  showReducer,
+  showing,
+  setShowing,
+}) => (
+  <>
+    <Modal
+      id="results-metrics"
+      show={showing}
+      onHide={() => setShowing(false)}
+      title="Scoring Detail"
+      width="min(1000px, 90vw)"
+      overflow="hidden"
+      padded={false}
+      className={styles.scoringDetailModal}
+      footer={
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={() => setShowing(false)}
+        >
+          Close
+        </button>
+      }
+    >
+      <ScoreGrid scoreGroups={grouped} showReducer={showReducer} />
+    </Modal>
+    <LinkButton
+      className={styles.moreButton}
+      text="All scoring..."
+      onClick={() => setShowing(true)}
+    />
+  </>
+);
 
 interface VerticalMetricProps {
   metric: MetricSummary;
