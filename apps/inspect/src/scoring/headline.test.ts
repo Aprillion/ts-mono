@@ -140,7 +140,9 @@ describe("headlineMetric", () => {
       score("sanity", { coverage: 0.1 }),
       score("main", { accuracy: 0.9 }),
     ]);
-    expect(headlineMetric(evalResults, { metric: "accuracy" })?.value).toBe(0.9);
+    expect(headlineMetric(evalResults, { metric: "accuracy" })?.value).toBe(
+      0.9
+    );
   });
 
   test("a stamped headline wins over the declaration", () => {
@@ -148,12 +150,16 @@ describe("headlineMetric", () => {
       [score("sanity", { coverage: 0.1 }), score("main", { accuracy: 0.9 })],
       { scorer: "sanity", score: "sanity", metric: "coverage", reducer: null }
     );
-    expect(headlineMetric(evalResults, { metric: "accuracy" })?.value).toBe(0.1);
+    expect(headlineMetric(evalResults, { metric: "accuracy" })?.value).toBe(
+      0.1
+    );
   });
 
   test("falls back to convention when the declaration matches nothing", () => {
     const evalResults = results([score("includes", { stderr: 0.1 })]);
-    expect(headlineMetric(evalResults, { scorer: "gone" })?.name).toBe("stderr");
+    expect(headlineMetric(evalResults, { scorer: "gone" })?.name).toBe(
+      "stderr"
+    );
   });
 
   test("returns undefined when there is nothing to report", () => {

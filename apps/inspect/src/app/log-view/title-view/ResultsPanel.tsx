@@ -66,9 +66,16 @@ export const displayScorersFromRunningMetrics = (metrics?: RunningMetric[]) => {
 
 interface ResultsPanelProps {
   scorers?: ScoreSummary[];
+  /** Whether the task declared its headline. Undeclared, the mark is just the
+   * first metric of the first score, and must not outrank the existing
+   * preference for a group that fits. */
+  headlineDeclared?: boolean;
 }
 
-export const ResultsPanel: FC<ResultsPanelProps> = ({ scorers }) => {
+export const ResultsPanel: FC<ResultsPanelProps> = ({
+  scorers,
+  headlineDeclared,
+}) => {
   const [showing, setShowing] = useProperty(
     "results-panel-metrics",
     "modal-showing",
@@ -143,10 +150,10 @@ export const ResultsPanel: FC<ResultsPanelProps> = ({ scorers }) => {
 
     let showMore = grouped.length > 1;
     if (primaryResults.length > kMaxPrimaryScoreRows) {
-      // a headline group stays selected even when oversized (it truncates
-      // below); without one, prefer a group that fits
+      // a declared headline's group stays selected even when oversized (it
+      // truncates below); otherwise prefer a group that fits
       const shorterResults =
-        headlineGroup !== -1
+        headlineDeclared && headlineGroup !== -1
           ? undefined
           : grouped.find((g) => {
               return g.length <= kMaxPrimaryScoreRows;

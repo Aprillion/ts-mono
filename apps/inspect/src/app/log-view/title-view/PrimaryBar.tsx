@@ -130,9 +130,13 @@ export const PrimaryBar: FC<PrimaryBarProps> = ({
                 ? displayScorersFromRunningMetrics(runningMetrics)
                 : toDisplayScorers(
                     evalResults?.scores,
-                    resolveHeadlineMetric(evalResults, evalSpec?.headline_metric)
+                    resolveHeadlineMetric(
+                      evalResults,
+                      evalSpec?.headline_metric
+                    )
                   )
             }
+            headlineDeclared={evalSpec?.headline_metric != null}
           />
         ) : undefined}
         {status === "cancelled" ? (
