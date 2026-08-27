@@ -6,18 +6,22 @@ import type {
   RefObject,
 } from "react";
 
+/** Scroll position as an item anchor: `index` is the item under the
+ *  viewport top. An index survives re-measurement of estimate-sized rows; a
+ *  raw offset does not. */
 export interface VirtualListStateSnapshot {
-  version: 1;
-  scrollOffset: number;
+  version: 2;
+  index: number;
   totalCount: number;
 }
 
 export interface VirtualListHandle {
   scrollToIndex(opts: {
     index: number;
-    align?: "start" | "center" | "end";
+    /** `auto`: no scroll when the row is already fully in view, else the
+     *  nearest edge. */
+    align?: "start" | "center" | "end" | "auto";
     behavior?: "auto" | "smooth";
-    onDone?: () => void;
   }): void;
   scrollTo(opts: { top: number; behavior?: "auto" | "smooth" }): void;
   getState(callback: (snapshot: VirtualListStateSnapshot) => void): void;

@@ -5,11 +5,12 @@ import {
   memo,
   ReactNode,
   useCallback,
-  useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
 
+import { useFindState } from "../find/FindCoordinatorContext";
 import { useCollapsedState, useResizeObserver } from "../hooks";
 
 import styles from "./ExpandablePanel.module.css";
@@ -65,21 +66,20 @@ export const ExpandablePanel: FC<ExpandablePanelProps> = memo(
     const contentRef = useResizeObserver(checkOverflow);
 
     const findTarget = useFindTarget();
-    // Initialize optimistically: if there's an active find target when we
-    // mount, assume our subtree contains it and render expanded immediately.
-    // The post-render effect below will collapse us back if the term isn't
-    // actually present. This swaps a "collapsed→expanded" flash on remount
-    // (which the user sees on every search step as the virtual list re-renders) for
-    // a much rarer "expanded→collapsed" flash on panels that don't match.
-    const [containsFindTarget, setContainsFindTarget] = useState(
-      () => findTarget !== null
-    );
+    // The texts a find source matched (e.g. "café" for a typed "cafe"): a
+    // panel holding one of them expands; without a source the typed term is
+    // compared case-insensitively.
+    const { variants } = useFindState();
+    // Mounts collapsed and decides before paint: a panel that expanded
+    // optimistically and then collapsed would move the match a find row just
+    // centred against the mount layout. Pre-paint, so no flash either way.
+    const [containsFindTarget, setContainsFindTarget] = useState(false);
 
     // No dep array: intentionally re-runs after every render so that changes
     // in children text (e.g. lazily loaded content) are picked up without an
     // additional mechanism.
     // eslint-disable-next-line react-hooks/exhaustive-deps, tsmono/no-raw-use-effect -- intentional: re-run after every render to track subtree text changes
-    useEffect(() => {
+    useLayoutEffect(() => {
       if (!findTarget) {
         // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing React state with DOM subtree text; no external subscription possible
         setContainsFindTarget(false);
@@ -91,8 +91,12 @@ export const ExpandablePanel: FC<ExpandablePanelProps> = memo(
         return;
       }
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-      const text = (root.textContent ?? "").toLowerCase();
-      setContainsFindTarget(text.includes(findTarget.term.toLowerCase()));
+      const text = root.textContent ?? "";
+      setContainsFindTarget(
+        variants.length > 0
+          ? variants.some((variant) => text.includes(variant))
+          : text.toLowerCase().includes(findTarget.term.toLowerCase())
+      );
     });
 
     const effectiveCollapsed = containsFindTarget ? false : collapsed;
@@ -216,6 +220,7 @@ const MoreToggle: FC<MoreToggleProps> = ({
         position === "block-left" ? styles.blockLeft : undefined
       )}
       style={style}
+      data-find-chrome={true}
     >
       <button
         type="button"

@@ -31,6 +31,13 @@ export { messagesToStr } from "./messagesToStr";
 
 export { messageSearchText } from "./messageSearchText";
 
+export type {
+  FindMessages,
+  MessagesFindProjection,
+  MessagesFindQuery,
+} from "./messagesFind";
+export { MESSAGES_FIND_SCOPE } from "./messagesFind";
+
 // Tool utilities
 export type { ToolCallResult } from "./tools/tool";
 export {

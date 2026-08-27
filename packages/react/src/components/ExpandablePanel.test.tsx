@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
 import { render, waitFor } from "@testing-library/react";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 
+import { FindProvider, useFindCoordinatorOptional } from "../find";
+import type { FindCoordinator } from "../find";
 import { ComponentStateProvider } from "../state/ComponentStateContext";
 import { makeStateHooks } from "../test/component-state-hooks";
 
@@ -128,6 +130,25 @@ describe("ExpandablePanel auto-expand on find target", () => {
     });
   });
 
+  it("mounts a non-matching panel truncated, never expanded first (a row's reveal centres against the mount layout)", () => {
+    const maxHeightsAtMount: string[] = [];
+    const { container } = render(
+      <Wrapper findTarget={{ term: "absent-term-xyz", eventId: "e1" }}>
+        <ExpandablePanel id="p" collapse={true} lines={5}>
+          <div
+            ref={(el) => {
+              if (el) maxHeightsAtMount.push(el.parentElement!.style.maxHeight);
+            }}
+          >
+            {longContent}
+          </div>
+        </ExpandablePanel>
+      </Wrapper>
+    );
+    expect(maxHeightsAtMount[0]).toBe("5rem");
+    expect(isTruncated(container)).toBe(true);
+  });
+
   it("returns to truncated state when target clears", async () => {
     const hooks = makeStateHooks();
     const tree = (target: { term: string; eventId: string } | null) => (
@@ -145,5 +166,49 @@ describe("ExpandablePanel auto-expand on find target", () => {
     await waitFor(() => expect(isTruncated(container)).toBe(false));
     rerender(tree(null));
     await waitFor(() => expect(isTruncated(container)).toBe(true));
+  });
+
+  it("expands for the variants the find source matched, not only the typed term", async () => {
+    const captured: { coordinator?: FindCoordinator } = {};
+    const Probe = () => {
+      const coordinator = useFindCoordinatorOptional();
+      useEffect(() => {
+        captured.coordinator = coordinator ?? undefined;
+      }, [coordinator]);
+      return null;
+    };
+    const { container } = render(
+      <FindProvider>
+        <Probe />
+        <Wrapper findTarget={{ term: "cafe", eventId: "e1" }}>
+          <ExpandablePanel id="p" collapse={true} lines={5}>
+            {"café au lait ".repeat(50)}
+          </ExpandablePanel>
+        </Wrapper>
+      </FindProvider>
+    );
+    await waitFor(() => expect(isTruncated(container)).toBe(true));
+
+    captured.coordinator!.registerSurface({
+      scopeId: "test",
+      source: {
+        find: () =>
+          Promise.resolve({
+            rows: [
+              {
+                anchor: { id: "r" },
+                count: 1,
+                texts: ["café"],
+                index: 0,
+              },
+            ],
+            complete: true,
+            total: { rows: 1, occurrences: 1, relation: "eq" },
+          }),
+      },
+      reveal: () => {},
+    });
+    captured.coordinator!.setTerm("cafe");
+    await waitFor(() => expect(isTruncated(container)).toBe(false));
   });
 });

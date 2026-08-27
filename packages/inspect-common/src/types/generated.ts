@@ -123,6 +123,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/find-messages/{log}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Api Find Messages */
+        post: operations["api_find_messages_find_messages__log__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/flow": {
         parameters: {
             query?: never;
@@ -2077,6 +2094,90 @@ export interface components {
             calls: components["schemas"]["JsonValue"][];
             /** Messages */
             messages: (components["schemas"]["ChatMessageSystem"] | components["schemas"]["ChatMessageUser"] | components["schemas"]["ChatMessageAssistant"] | components["schemas"]["ChatMessageTool"])[];
+        };
+        /** FindMessagesCursor */
+        FindMessagesCursor: {
+            /** Anchor */
+            anchor: string;
+        };
+        /**
+         * FindMessagesProjection
+         * @description How the viewer currently shows the rows; a host sends only what it changed.
+         */
+        FindMessagesProjection: {
+            /**
+             * Display Mode
+             * @default rendered
+             * @enum {string}
+             */
+            display_mode: "rendered" | "raw";
+            /**
+             * Tool Call Style
+             * @default complete
+             * @enum {string}
+             */
+            tool_call_style: "complete" | "compact" | "omit";
+            /**
+             * Unlabeled Roles
+             * @default []
+             */
+            unlabeled_roles: string[];
+        };
+        /** FindMessagesRequest */
+        FindMessagesRequest: {
+            cursor?: components["schemas"]["FindMessagesCursor"] | null;
+            /**
+             * Direction
+             * @enum {string}
+             */
+            direction: "forward" | "backward";
+            /** Epoch */
+            epoch: number;
+            /** Limit */
+            limit: number;
+            /**
+             * @default {
+             *       "display_mode": "rendered",
+             *       "tool_call_style": "complete",
+             *       "unlabeled_roles": []
+             *     }
+             */
+            projection: components["schemas"]["FindMessagesProjection"];
+            /** Sample Id */
+            sample_id: string | number;
+            /** Text */
+            text: string;
+        };
+        /** FindMessagesResponse */
+        FindMessagesResponse: {
+            /** Complete */
+            complete: boolean;
+            /** Rows */
+            rows: components["schemas"]["FindMessagesRow"][];
+            total: components["schemas"]["FindMessagesTotal"];
+        };
+        /** FindMessagesRow */
+        FindMessagesRow: {
+            /** Anchor */
+            anchor: string;
+            /** Count */
+            count: number;
+            /** Index */
+            index: number;
+            /** Texts */
+            texts: string[];
+        };
+        /** FindMessagesTotal */
+        FindMessagesTotal: {
+            /** Occurrences */
+            occurrences: number;
+            /**
+             * Relation
+             * @enum {string}
+             */
+            relation: "eq" | "gte";
+            /** Rows */
+            rows: number;
         };
         /**
          * GenerateConfig
@@ -4272,6 +4373,32 @@ export interface operations {
                 };
                 content: {
                     "application/json": string[];
+                };
+            };
+        };
+    };
+    api_find_messages_find_messages__log__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                log: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FindMessagesRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FindMessagesResponse"];
                 };
             };
         };

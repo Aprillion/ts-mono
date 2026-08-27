@@ -9,10 +9,16 @@ import {
 
 import { deepActiveElement, isEditableTarget } from "@tsmono/util";
 
+import {
+  findScrollableParent,
+  scrollRangeToCenter,
+  useFindCoordinatorOptional,
+  useFindState,
+  type FindState,
+} from "../find";
 import { useDebouncedCallback } from "../hooks/useDebouncedCallback";
 
 import { useExtendedFind } from "./ExtendedFindContext";
-import { findScrollableParent, scrollRangeToCenter } from "./findBandDom";
 import { FindBandUI } from "./FindBandUI";
 import { isFindNextShortcut, isFindShortcut } from "./findShortcuts";
 import { useFindTargetSetter } from "./FindTargetContext";
@@ -36,6 +42,12 @@ export const FindBand: FC<FindBandProps> = ({ onClose, debounceMs = 100 }) => {
   const searchBoxRef = useRef<HTMLInputElement>(null);
   const { extendedFindTerm, countAllMatches, getMatchCountersVersion } =
     useExtendedFind();
+  // Surfaces registered with the find coordinator (currently only the
+  // messages list) are searched through it; every other tab still goes
+  // through the ExtendedFind + window.find path below.
+  const coordinator = useFindCoordinatorOptional();
+  const findState = useFindState();
+  const hasSurface = coordinator !== null && findState.scopeId !== null;
   const setFindTarget = useFindTargetSetter();
   const lastFoundItem = useRef<{
     text: string;
@@ -60,6 +72,36 @@ export const FindBand: FC<FindBandProps> = ({ onClose, debounceMs = 100 }) => {
   // (Scoring/Metadata/JSON) the counter is unknown but `window.find` may
   // still succeed — we use this flag for the "No results" UI instead.
   const [noResults, setNoResults] = useState(false);
+  // The two paths keep separate state: when the active one flips (tab
+  // switch) the legacy counters start over. Adjusted during render, the one
+  // place the hooks lint allows a state reset.
+  const [legacyStateForSurface, setLegacyStateForSurface] =
+    useState(hasSurface);
+  if (legacyStateForSurface !== hasSurface) {
+    setLegacyStateForSurface(hasSurface);
+    setMatchCount(null);
+    setCurrentMatchIndex(0);
+    setNoResults(false);
+  }
+
+  // Typing (re)surveys; an explicit search (Enter, next/prev, shortcuts)
+  // steps once the coordinator already holds the term.
+  const searchCoordinator = useCallback(
+    (searchTerm: string, back: boolean, typing: boolean) => {
+      if (!coordinator) return;
+      if (typing || searchTerm !== findState.term) {
+        // Publish the term for auto-expand consumers, then survey; the
+        // coordinator reveals the survey page's first match.
+        setFindTarget({ term: searchTerm, eventId: "" });
+        coordinator.setTerm(searchTerm);
+      } else if (back) {
+        coordinator.previous();
+      } else {
+        coordinator.next();
+      }
+    },
+    [coordinator, findState.term, setFindTarget]
+  );
 
   const handleSearch = useCallback(
     async (back = false, skipKnownMiss = false) => {
@@ -67,10 +109,16 @@ export const FindBand: FC<FindBandProps> = ({ onClose, debounceMs = 100 }) => {
 
       const searchTerm = searchBoxRef.current?.value ?? "";
       if (!searchTerm) {
+        coordinator?.setTerm("");
         setMatchCount(null);
         setCurrentMatchIndex(0);
         setNoResults(false);
         setFindTarget(null);
+        return;
+      }
+
+      if (hasSurface) {
+        searchCoordinator(searchTerm, back, skipKnownMiss);
         return;
       }
 
@@ -99,7 +147,7 @@ export const FindBand: FC<FindBandProps> = ({ onClose, debounceMs = 100 }) => {
       }
 
       // `total` only counts matches reported by registered search sources
-      // (transcript, chat virtual list). Tabs that are plain static markup
+      // (the transcript). Tabs that are plain static markup
       // — Scoring, Metadata, JSON — register no source, so total is 0 even
       // though `window.find` could highlight visible text just fine. Don't
       // bail on `total === 0`: try the find, and if it succeeds use the
@@ -141,7 +189,8 @@ export const FindBand: FC<FindBandProps> = ({ onClose, debounceMs = 100 }) => {
         searchTerm,
         back,
         lastFoundItem.current,
-        extendedFindTerm
+        extendedFindTerm,
+        () => searchIdRef.current !== thisSearchId
       );
 
       if (searchIdRef.current !== thisSearchId) {
@@ -207,8 +256,38 @@ export const FindBand: FC<FindBandProps> = ({ onClose, debounceMs = 100 }) => {
 
       focusedElement?.focus();
     },
-    [setFindTarget, extendedFindTerm, countAllMatches, getMatchCountersVersion]
+    [
+      setFindTarget,
+      extendedFindTerm,
+      countAllMatches,
+      getMatchCountersVersion,
+      coordinator,
+      hasSurface,
+      searchCoordinator,
+    ]
   );
+
+  // eslint-disable-next-line tsmono/no-raw-use-effect -- baselined at rule introduction; migrate to a named hook or derived state
+  useEffect(() => () => coordinator?.close(), [coordinator]);
+
+  // When the active path flips (tab switch) the coordinator follows the
+  // input's current term.
+  // eslint-disable-next-line tsmono/no-raw-use-effect -- baselined at rule introduction; migrate to a named hook or derived state
+  useEffect(() => {
+    if (hasSurface) {
+      // Supersede a legacy search still walking the DOM.
+      searchIdRef.current++;
+      const term = searchBoxRef.current?.value ?? "";
+      if (term) setFindTarget({ term, eventId: "" });
+      coordinator.setTerm(term);
+    } else {
+      // The term stays with the tab that typed it: a return surveys the
+      // input afresh instead of resuming a stale one.
+      coordinator?.setTerm("");
+      lastFoundItem.current = null;
+      currentSearchTerm.current = "";
+    }
+  }, [hasSurface, coordinator, setFindTarget]);
 
   // eslint-disable-next-line tsmono/no-raw-use-effect -- baselined at rule introduction; migrate to a named hook or derived state
   useEffect(() => {
@@ -275,9 +354,9 @@ export const FindBand: FC<FindBandProps> = ({ onClose, debounceMs = 100 }) => {
   const runDebouncedSearch = useCallback(async () => {
     if (!searchBoxRef.current) return;
     await handleSearch(false, true);
-    // Mark for cursor restore on next keypress (keeps find highlight visible)
-    needsCursorRestoreRef.current = true;
-  }, [handleSearch]);
+    // window.find steals the input's caret; the coordinator path never does.
+    if (!hasSurface) needsCursorRestoreRef.current = true;
+  }, [handleSearch, hasSurface]);
 
   const handleInputChange = useDebouncedCallback(
     runDebouncedSearch,
@@ -373,16 +452,30 @@ export const FindBand: FC<FindBandProps> = ({ onClose, debounceMs = 100 }) => {
       onKeyDown={handleKeyDown}
       onBeforeInput={handleBeforeInput}
       onChange={handleInputChange}
-      noResults={noResults}
-      matchCount={matchCount ?? undefined}
+      noResults={hasSurface ? findState.noResults : noResults}
+      matchCount={
+        hasSurface ? coordinatorCount(findState) : (matchCount ?? undefined)
+      }
       matchIndex={
-        matchCount !== null && matchCount > 0
-          ? currentMatchIndex - 1
-          : undefined
+        hasSurface
+          ? (findState.activeOrdinal ?? undefined)
+          : matchCount !== null && matchCount > 0
+            ? currentMatchIndex - 1
+            : undefined
+      }
+      countIsLowerBound={
+        hasSurface &&
+        (!findState.complete || findState.total?.relation === "gte")
       }
     />
   );
 };
+
+function coordinatorCount({ total }: FindState): number | undefined {
+  return total !== null && total.occurrences > 0
+    ? total.occurrences
+    : undefined;
+}
 // `Window.find` is a non-standard but widely-supported API not in lib.dom.
 // Typed optional so hosts without it degrade to "No results" (via the
 // extended-find path) instead of throwing mid-search.
@@ -437,7 +530,10 @@ async function findExtendedInDOM(
   extendedFindTerm: (
     term: string,
     direction: "forward" | "backward"
-  ) => Promise<boolean>
+  ) => Promise<boolean>,
+  /** A newer search (or the coordinator taking over the tab) replaced this
+   *  one: stop touching the DOM selection. */
+  superseded: () => boolean
 ) {
   let result = false;
   let hasTriedExtendedSearch = false;
@@ -445,6 +541,7 @@ async function findExtendedInDOM(
   const maxAttempts = 25;
 
   for (let attempts = 0; attempts < maxAttempts; attempts++) {
+    if (superseded()) return false;
     result = windowFind(searchTerm, back);
 
     if (result) {
@@ -467,6 +564,7 @@ async function findExtendedInDOM(
               searchTerm,
               back ? "backward" : "forward"
             );
+            if (superseded()) return false;
 
             if (foundInVirtual) {
               extendedSearchSucceeded = true;
@@ -508,6 +606,7 @@ async function findExtendedInDOM(
         searchTerm,
         back ? "backward" : "forward"
       );
+      if (superseded()) return false;
 
       if (foundInVirtual) {
         extendedSearchSucceeded = true;

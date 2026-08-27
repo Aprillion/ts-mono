@@ -2,7 +2,7 @@
 import { cleanup, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { testInfoEvent } from "@tsmono/inspect-common/testing";
+import { testErrorEvent } from "@tsmono/inspect-common/testing";
 import {
   ComponentStateProvider,
   type ComponentStateHooks,
@@ -33,25 +33,24 @@ describe("outlineNodeRunning", () => {
   });
 });
 
+// Error events survive the outline's filters as one row each (info events
+// are dropped), so three of them give the list rows to anchor on.
 const node = (id: string): EventNode =>
   new EventNode(
     id,
-    testInfoEvent({
-      uuid: id,
-      timestamp: "2026-01-01T00:00:00Z",
-      source: "",
-      data: "",
-      pending: false,
-      span_id: null,
-      metadata: null,
-    }),
+    testErrorEvent({ uuid: id, timestamp: "2026-01-01T00:00:00Z" }),
     0
   );
 
 describe("TranscriptOutline persistence scoping", () => {
   beforeEach(() => {
     vi.useFakeTimers();
-    Element.prototype.scrollTo = function () {};
+    // jsdom has no scrollTo; the virtualizer restores offsets through it.
+    Element.prototype.scrollTo = function (this: Element, options?: unknown) {
+      if (typeof options === "object" && options && "top" in options) {
+        this.scrollTop = Number((options as { top: number }).top);
+      }
+    };
   });
   afterEach(() => {
     cleanup();
@@ -103,24 +102,28 @@ describe("TranscriptOutline persistence scoping", () => {
     scrollElB.remove();
   });
 
-  it("restores the offset when the same transcript remounts", () => {
+  it("restores the top row when the same transcript remounts", () => {
     const hooks = makeReactiveStateHooks();
 
     const scrollElA = document.createElement("div");
     document.body.appendChild(scrollElA);
     const viewA = mountOutline(hooks, "transcript-A", scrollElA);
     vi.advanceTimersByTime(50);
-    scrollElA.scrollTop = 500;
+    // Outline rows are estimate-sized at 50px: 60 is 10px into row "b".
+    scrollElA.scrollTop = 60;
     scrollElA.dispatchEvent(new Event("scroll"));
     vi.advanceTimersByTime(400);
     viewA.unmount();
     scrollElA.remove();
 
     const scrollElAgain = document.createElement("div");
+    // jsdom reports scrollHeight 0, which the virtualizer clamps targets to.
+    Object.defineProperty(scrollElAgain, "scrollHeight", { value: 200 });
     document.body.appendChild(scrollElAgain);
     const viewAgain = mountOutline(hooks, "transcript-A", scrollElAgain);
     vi.advanceTimersByTime(100);
-    expect(scrollElAgain.scrollTop).toBe(500);
+    // The anchor row is scrolled to its start; the 10px within it is not kept.
+    expect(scrollElAgain.scrollTop).toBe(50);
     viewAgain.unmount();
     scrollElAgain.remove();
   });

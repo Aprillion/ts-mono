@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render } from "@testing-library/react";
+import { act, render, renderHook } from "@testing-library/react";
 import { createRef, type ReactNode, type RefObject } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -14,7 +14,10 @@ import {
   makeStateHooks,
 } from "../test/component-state-hooks";
 
+import type { VirtualListHandle } from "./types";
+import { useVirtualListState } from "./use-virtual-list-state";
 import { VirtualList } from "./VirtualList";
+import { useVirtualScroller } from "./VirtualScrollerContext";
 
 const Wrapper: React.FC<{
   hooks: ComponentStateHooks;
@@ -308,8 +311,11 @@ describe("VirtualList persist flush on unmount", () => {
     vi.useRealTimers();
   });
 
-  const mountWithStore = (scrollRef: RefObject<HTMLDivElement | null>) => {
-    const store = new Map<string, unknown>();
+  const mountWithStore = (
+    scrollRef: RefObject<HTMLDivElement | null>,
+    seed?: Record<string, unknown>
+  ) => {
+    const store = new Map<string, unknown>(Object.entries(seed ?? {}));
     const getKey = (id: string, prop: string) => `${id}::${prop}`;
     const hooks: ComponentStateHooks = {
       useValue: (id, prop, defaultValue) =>
@@ -366,14 +372,109 @@ describe("VirtualList persist flush on unmount", () => {
     el.scrollTop = 0;
     unmount();
 
+    // Rows are estimate-sized (400px): 500 lands 100px into row 1.
     expect(store.get("flush-list::snapshot")).toMatchObject({
-      scrollOffset: 500,
+      version: 2,
+      index: 1,
     });
 
     // And nothing fires later against the departed container.
     store.delete("flush-list::snapshot");
     vi.advanceTimersByTime(1000);
     expect(store.get("flush-list::snapshot")).toBeUndefined();
+  });
+
+  it("restores a persisted anchor to the start of its row", () => {
+    const scrollRef = createRef<HTMLDivElement>();
+    const scrollTo = vi.fn();
+    Element.prototype.scrollTo = scrollTo;
+    mountWithStore(scrollRef, {
+      "flush-list::snapshot": {
+        version: 2,
+        index: 2,
+        totalCount: 3,
+      },
+    });
+    // jsdom reports scrollHeight 0, which the virtualizer clamps targets to.
+    Object.defineProperty(scrollRef.current!, "scrollHeight", { value: 1200 });
+    vi.advanceTimersByTime(50);
+    // Row 2 of three 400px estimates starts at 800.
+    expect(scrollTo).toHaveBeenCalledWith({ top: 800, behavior: "auto" });
+  });
+
+  it("ignores a version-1 (raw offset) snapshot", () => {
+    const restore = (seed: unknown) => {
+      const { hooks, store } = makeReactiveStateStore();
+      store.set("v1-list::snapshot", seed);
+      const wrapper: React.FC<{ children: ReactNode }> = ({ children }) => (
+        <Wrapper hooks={hooks}>{children}</Wrapper>
+      );
+      const { result } = renderHook(() => useVirtualListState("v1-list"), {
+        wrapper,
+      });
+      return result.current.getRestoreSnapshot();
+    };
+    expect(
+      restore({ version: 1, scrollOffset: 500, totalCount: 3 })
+    ).toBeUndefined();
+    expect(restore({ version: 2, index: 2, totalCount: 3 })).toEqual({
+      version: 2,
+      index: 2,
+      totalCount: 3,
+    });
+  });
+
+  it("does not persist the scroll a row requests through the scroller context", () => {
+    const scrollRef = createRef<HTMLDivElement>();
+    const { hooks, store } = makeReactiveStateStore();
+    // A restored position: the mount-time scroll settles and hands the
+    // persistence guard over to later programmatic scrolls.
+    const restored = { version: 2, index: 0, totalCount: 3 };
+    store.set("ctx-list::snapshot", restored);
+    // jsdom measures 0x0; rows render only inside a sized viewport.
+    vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(
+      () => new DOMRect(0, 0, 800, 600)
+    );
+    vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(600);
+    vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockReturnValue(800);
+    const Row: React.FC<{ item: string }> = ({ item }) => {
+      const scroller = useVirtualScroller();
+      return (
+        <button onClick={() => scroller?.scrollToContentOffset(500)}>
+          {item}
+        </button>
+      );
+    };
+    const { unmount, getAllByRole } = render(
+      <Wrapper hooks={hooks}>
+        <div ref={scrollRef}>
+          <VirtualList<string>
+            persistenceKey="ctx-list"
+            scrollRef={scrollRef}
+            data={["a", "b", "c"]}
+            renderRow={(_index: number, item: string) => <Row item={item} />}
+            live={false}
+          />
+        </div>
+      </Wrapper>
+    );
+    const el = scrollRef.current!;
+    act(() => {
+      vi.advanceTimersByTime(50);
+    });
+
+    act(() => {
+      getAllByRole("button")[0]!.click();
+    });
+    Object.defineProperty(el, "scrollTop", {
+      value: 500,
+      configurable: true,
+      writable: true,
+    });
+    el.dispatchEvent(new Event("scroll"));
+    vi.advanceTimersByTime(20);
+    unmount();
+    expect(store.get("ctx-list::snapshot")).toBe(restored);
   });
 
   it("cancels the pending initial-scroll frame on unmount (shared container)", () => {
@@ -393,6 +494,128 @@ describe("VirtualList persist flush on unmount", () => {
     unmount();
     vi.advanceTimersByTime(50);
     expect(el.scrollTop).toBe(300);
+  });
+});
+
+describe("VirtualList scrollToIndex", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("takes a live list out of follow, so streamed rows no longer pull to the tail", () => {
+    const scrollRef = createRef<HTMLDivElement>();
+    const handle = createRef<VirtualListHandle>();
+    const hooks = makeStateHooks();
+    const list = (data: string[]) => (
+      <Wrapper hooks={hooks}>
+        <div ref={scrollRef}>
+          <VirtualList<string>
+            ref={handle}
+            persistenceKey="follow-list"
+            scrollRef={scrollRef}
+            data={data}
+            renderRow={(_index: number, item: string) => <div>{item}</div>}
+            live={true}
+            smoothScroll={false}
+          />
+        </div>
+      </Wrapper>
+    );
+    const scrollTo = vi.fn();
+    Element.prototype.scrollTo = scrollTo;
+    const { rerender, unmount } = render(list(["a", "b", "c"]));
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
+    // A fresh live mount follows: content growth scrolls to the tail.
+    rerender(list(["a", "b", "c", "d"]));
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
+    const followScrolls = scrollTo.mock.calls.length;
+    expect(followScrolls).toBeGreaterThan(0);
+
+    act(() => handle.current!.scrollToIndex({ index: 0 }));
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+    const afterJump = scrollTo.mock.calls.length;
+    rerender(list(["a", "b", "c", "d", "e"]));
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
+    expect(scrollTo.mock.calls.length).toBe(afterJump);
+    unmount();
+  });
+});
+
+describe("VirtualList auto-scroll guard", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("releases the auto-scroll guard after a jump, so user scrolls persist again", () => {
+    const scrollRef = createRef<HTMLDivElement>();
+    const handle = createRef<VirtualListHandle>();
+    const store = new Map<string, unknown>();
+    const getKey = (id: string, prop: string) => `${id}::${prop}`;
+    const hooks: ComponentStateHooks = {
+      useValue: (id, prop, defaultValue) =>
+        store.has(getKey(id, prop))
+          ? store.get(getKey(id, prop))
+          : defaultValue,
+      useSetValue: () => (id, prop, value) => {
+        store.set(getKey(id, prop), value);
+      },
+      useRemoveValue: () => (id, prop) => {
+        store.delete(getKey(id, prop));
+      },
+      useEntries: () => undefined,
+      useRemoveAll: () => () => {},
+      useRemoveByPrefix: () => () => {},
+    };
+    const { unmount } = render(
+      <Wrapper hooks={hooks}>
+        <div ref={scrollRef}>
+          <VirtualList<string>
+            ref={handle}
+            persistenceKey="guard-list"
+            scrollRef={scrollRef}
+            data={["a", "b", "c"]}
+            renderRow={(_index: number, item: string) => <div>{item}</div>}
+            live={false}
+            smoothScroll={false}
+          />
+        </div>
+      </Wrapper>
+    );
+    vi.advanceTimersByTime(50);
+    act(() => handle.current!.scrollToIndex({ index: 2 }));
+    act(() => handle.current!.jumpToStart());
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
+
+    const el = scrollRef.current!;
+    Object.defineProperty(el, "scrollTop", {
+      value: 500,
+      configurable: true,
+      writable: true,
+    });
+    el.dispatchEvent(new Event("wheel"));
+    el.dispatchEvent(new Event("scroll"));
+    vi.advanceTimersByTime(20);
+    unmount();
+    expect(store.get("guard-list::snapshot")).toMatchObject({
+      version: 2,
+      index: 1,
+    });
   });
 });
 
@@ -453,7 +676,7 @@ describe("VirtualList embedded in a shared scroll container", () => {
     unmount();
   });
 
-  it("subtracts the list's offset in the container from its own padding", () => {
+  it("subtracts the list's offset in the container from its own padding", async () => {
     // Content above an embedded list occupies real DOM space; item
     // coordinates include it (TanStack scrollMargin), so the list's spacer
     // must not duplicate it. Layout is mocked before mount: the scroller is
@@ -472,6 +695,13 @@ describe("VirtualList embedded in a shared scroll container", () => {
 
     const { unmount } = mountEmbedded();
     const root = document.getElementById("embedded-root")!;
+    // Rows are laid out from their estimate first and measured in a
+    // post-commit microtask (measuring inside the commit makes TanStack
+    // flushSync mid-render).
+    expect(
+      root.querySelectorAll<HTMLElement>("[data-item-index]").item(1).style.top
+    ).toBe("400px");
+    await act(async () => {});
 
     // All three (estimated 400px) rows land in or overscan past the 600px
     // viewport, whose window starts at the container's scrollTop (0) —

@@ -32,6 +32,10 @@ import type {
 import { useScaledVirtualizer } from "./use-scaled-virtualizer";
 import { useVirtualListState } from "./use-virtual-list-state";
 import styles from "./VirtualList.module.css";
+import {
+  VirtualScrollerContext,
+  type VirtualScroller,
+} from "./VirtualScrollerContext";
 
 const BOTTOM_THRESHOLD_PX = 30;
 const USER_INTERACTION_WINDOW_MS = 400;
@@ -195,17 +199,46 @@ export function VirtualList<T>({
     [externalScrollEl, scrollParent]
   );
 
-  const { virtualizer, scale, toContentScroll, toSpacerScroll } =
-    useScaledVirtualizer({
-      count: data.length,
-      estimateSize: () => estimatedItemHeight,
-      getScrollElement,
-      overscan,
-      // A stable virtualizer option rather than a post-scroll `scrollTop +=`,
-      // so tanstack's reconcile re-applies it instead of erasing it on far jumps.
-      scrollPaddingStart: scrollPaddingStart ?? 0,
-      scrollMargin,
-    });
+  const { virtualizer, scale, toContentScroll } = useScaledVirtualizer({
+    count: data.length,
+    estimateSize: () => estimatedItemHeight,
+    getScrollElement,
+    overscan,
+    // A stable virtualizer option rather than a post-scroll `scrollTop +=`,
+    // so tanstack's reconcile re-applies it instead of erasing it on far jumps.
+    scrollPaddingStart: scrollPaddingStart ?? 0,
+    scrollMargin,
+  });
+
+  // Rows measure after the commit, not in the ref callback: measuring there
+  // runs inside React's layout phase, and TanStack answers a measurement that
+  // moves scrollTop with flushSync — illegal mid-commit. One microtask per
+  // commit lands after it and before paint, so the compensation still
+  // happens in the same frame; it measures every row the commit mounted
+  // before notifying listeners, so a listener sees the whole band measured
+  // (a row's neighbours included). A node detached before then is left to
+  // the null ref callback that follows it.
+  const measureListeners = useRef(new Set<(node: Element) => void>());
+  const pendingMeasure = useRef<(HTMLDivElement | null)[]>([]);
+  const measureRow = useCallback(
+    (node: HTMLDivElement | null) => {
+      const pending = pendingMeasure.current;
+      pending.push(node);
+      if (pending.length > 1) return;
+      queueMicrotask(() => {
+        const nodes = pending.splice(0);
+        for (const node of nodes) {
+          if (node && !node.isConnected) continue;
+          virtualizer.measureElement(node);
+        }
+        for (const node of nodes) {
+          if (!node?.isConnected) continue;
+          for (const listener of measureListeners.current) listener(node);
+        }
+      });
+    },
+    [virtualizer]
+  );
 
   const { getRestoreSnapshot, recordSnapshot } =
     useVirtualListState(persistenceKey);
@@ -469,55 +502,25 @@ export function VirtualList<T>({
   // ignored so a restore isn't re-persisted, drifting the saved position.
   const lastAutoScrollTopRef = useRef<number | null>(null);
 
-  // Re-fires scrollToIndex each frame to absorb external chrome shifts TanStack won't reconcile on its own; bounded, and real user input cancels it.
-  const settleFrameRef = useRef(0);
   const releaseFrameRef = useRef(0);
-  const settleScrollToIndex = useCallback(
-    (
-      index: number,
-      align?: "start" | "center" | "end",
-      onDone?: () => void
-    ) => {
-      const jump = () =>
-        virtualizer.scrollToIndex(index, { align, behavior: "auto" });
-      // Every exit path must release the auto-scroll guard (else persistence
-      // stays disabled); cancel a previous settle's pending release so it
-      // can't flip the guard off mid-settle.
+  // Programmatic scrolls set the auto-scroll guard so the scroll listeners
+  // don't persist them as user scrolls; the guard lifts once the virtualizer
+  // reports the scroll finished (it owns the reconcile after re-measure).
+  const programmaticScroll = useCallback(
+    (run: () => void) => {
       isAutoScrollingRef.current = true;
       cancelAnimationFrame(releaseFrameRef.current);
-      const finish = () => {
-        const elNow = getScrollElement();
-        if (elNow) lastAutoScrollTopRef.current = elNow.scrollTop;
-        releaseFrameRef.current = requestAnimationFrame(() => {
-          isAutoScrollingRef.current = false;
-        });
-        onDone?.();
-      };
-      jump();
-      const el = getScrollElement();
-      if (!el) {
-        finish();
-        return;
-      }
-      cancelAnimationFrame(settleFrameRef.current);
-      let frames = 0;
-      let stable = 0;
-      let lastTop = el.scrollTop;
-      const settle = () => {
-        if (userInteractingRef.current) {
-          finish();
+      run();
+      const release = () => {
+        if (virtualizer.isScrolling) {
+          releaseFrameRef.current = requestAnimationFrame(release);
           return;
         }
-        jump();
-        stable = Math.abs(el.scrollTop - lastTop) <= 1 ? stable + 1 : 0;
-        lastTop = el.scrollTop;
-        if (stable < 3 && (frames += 1) < 30) {
-          settleFrameRef.current = requestAnimationFrame(settle);
-        } else {
-          finish();
-        }
+        const el = getScrollElement();
+        if (el) lastAutoScrollTopRef.current = el.scrollTop;
+        isAutoScrollingRef.current = false;
       };
-      settleFrameRef.current = requestAnimationFrame(settle);
+      releaseFrameRef.current = requestAnimationFrame(release);
     },
     [virtualizer, getScrollElement]
   );
@@ -525,78 +528,29 @@ export function VirtualList<T>({
     cancelAnimationFrame(settleFrameRef.current);
     cancelAnimationFrame(releaseFrameRef.current);
   });
-  const lastInitialKeyRef = useRef<string | null>(null);
-  // Restore a persisted pixel offset by RE-FORCING it until the virtualizer's
-  // re-measure compensation goes quiet. A one-shot write races the remount
-  // measurement pass: every row measured after the write that sits entirely
-  // above the fold shifts scrollTop by its estimate error (see
-  // shouldAdjustScrollPositionOnItemSizeChange), and which rows land after
-  // the write depends on re-render timing — virtual-core 3.17.7 moved that
-  // timing (notify(adjustedSync) -> flushSync) and drifted the restore by a
-  // full row (#519). Re-forcing until quiet makes the landing independent of
-  // when re-renders happen; it also absorbs the browser clamping an early
-  // write against a not-yet-grown (estimate-sized) scrollHeight. The target
-  // is a callback so per-frame writes see fresh clamp bounds — and, via the
-  // ref-backed converters, a fresh scale — as totals grow.
-  const settleRestoreScroll = useCallback(
-    (getTargetSpacerTop: () => number) => {
-      // Guard bookkeeping mirrors settleScrollToIndex: every exit path —
-      // including a missing scroll element — must book the guard release, or
-      // the caller-taken auto-scroll guard leaks and persistence stays
-      // silently dead for the rest of the mount.
-      isAutoScrollingRef.current = true;
-      cancelAnimationFrame(releaseFrameRef.current);
-      cancelAnimationFrame(settleFrameRef.current);
-      const el = getScrollElement();
-      const keyAtStart = lastInitialKeyRef.current;
-      const finish = () => {
-        if (el) lastAutoScrollTopRef.current = el.scrollTop;
-        releaseFrameRef.current = requestAnimationFrame(() => {
-          isAutoScrollingRef.current = false;
-        });
-      };
-      if (!el) {
-        finish();
-        return;
-      }
-      el.scrollTop = getTargetSpacerTop();
-      let frames = 0;
-      let stable = 0;
-      let lastTop = el.scrollTop;
-      const settle = () => {
-        // A key change mid-settle means this restore belongs to the previous
-        // sample — stop before writing its offset into the new one's list.
-        // User input always wins over a pending restore.
-        if (
-          userInteractingRef.current ||
-          lastInitialKeyRef.current !== keyAtStart
-        ) {
-          finish();
-          return;
-        }
-        // Read BEFORE re-forcing: the drift being waited out (re-measure
-        // compensation nudging scrollTop after our write) happens between
-        // frames, and forcing first would hide it from the stability check.
-        const preTop = el.scrollTop;
-        el.scrollTop = getTargetSpacerTop();
-        const postTop = el.scrollTop;
-        // Any movement since last frame — external compensation (preTop) or
-        // our own re-force landing somewhere new (clamp released as content
-        // grew, postTop) — means the layout is still moving.
-        const moved =
-          Math.abs(preTop - lastTop) > 1 || Math.abs(postTop - lastTop) > 1;
-        stable = moved ? 0 : stable + 1;
-        lastTop = postTop;
-        if (stable < 3 && (frames += 1) < 30) {
-          settleFrameRef.current = requestAnimationFrame(settle);
-        } else {
-          finish();
-        }
-      };
-      settleFrameRef.current = requestAnimationFrame(settle);
-    },
-    [getScrollElement]
+  const scroller = useMemo<VirtualScroller>(
+    () => ({
+      contentOffsetOf: (clientTop) => {
+        const el = getScrollElement();
+        if (!el) return 0;
+        return (
+          toContentScroll(el.scrollTop) +
+          (clientTop - el.getBoundingClientRect().top)
+        );
+      },
+      viewportRect: () =>
+        getScrollElement()?.getBoundingClientRect() ?? new DOMRect(),
+      scrollToContentOffset: (offset) =>
+        programmaticScroll(() => virtualizer.scrollToOffset(offset)),
+      onRowMeasured: (listener) => {
+        measureListeners.current.add(listener);
+        return () => measureListeners.current.delete(listener);
+      },
+    }),
+    [getScrollElement, toContentScroll, virtualizer, programmaticScroll]
   );
+
+  const lastInitialKeyRef = useRef<string | null>(null);
   const lastInitialIndexRef = useRef<number | undefined>(undefined);
   // The no-snapshot "reset to top" is a one-shot per (re)key: re-firing on
   // every measurement would keep slamming scrollTop to 0 against an
@@ -637,8 +591,12 @@ export function VirtualList<T>({
         // Explicit navigation target beats persisted scroll state;
         // scrollPaddingStart makes it land like a runtime jump.
         hasInitialScrolledRef.current = true;
-        // settleScrollToIndex releases the auto-scroll guard itself.
-        settleScrollToIndex(initialIndex, "start");
+        programmaticScroll(() =>
+          virtualizer.scrollToIndex(initialIndex, {
+            align: "start",
+            behavior: "auto",
+          })
+        );
       } else if (followOutput && live) {
         // Live follow owns the scroll position: commit the one-shot guard so
         // this effect stops resetting scrollTop to 0 on every new event.
@@ -649,24 +607,14 @@ export function VirtualList<T>({
         // wheel); a foreign scrollTop from a shared container doesn't block it.
         hasInitialScrolledRef.current = true;
         if (!userScrolledRef.current) {
-          // settleRestoreScroll releases the auto-scroll guard itself.
-          // Whether to clamp is decided once at restore time (one-shot
-          // semantics); only the clamp BOUNDS are re-read per frame.
-          const clampToMax = snapshot.totalCount !== data.length;
-          settleRestoreScroll(() => {
-            const target = toSpacerScroll(snapshot.scrollOffset);
-            if (!clampToMax) return target;
-            // Clamped fully in spacer space (dividing by the positive scale
-            // distributes over min/max, so this equals the content-space clamp).
-            // scrollMargin is unscaled DOM above the list, so it adds after.
-            const maxSpacerTop = Math.max(
-              0,
-              toSpacerScroll(virtualizer.getTotalSize()) +
-                scrollMargin -
-                el.clientHeight
-            );
-            return Math.min(target, maxSpacerTop);
-          });
+          // Index targets are re-aimed by the virtualizer after each
+          // re-measure (offset targets are not).
+          programmaticScroll(() =>
+            virtualizer.scrollToIndex(snapshot.index, {
+              align: "start",
+              behavior: "auto",
+            })
+          );
         } else {
           release();
         }
@@ -698,27 +646,29 @@ export function VirtualList<T>({
   }, [
     persistenceKey,
     initialIndex,
-    settleScrollToIndex,
-    settleRestoreScroll,
+    programmaticScroll,
     contentTotal,
     data.length,
     followOutput,
     live,
     getRestoreSnapshot,
     getScrollElement,
-    toSpacerScroll,
     virtualizer,
     scrollMargin,
     resetScrollOnMount,
   ]);
 
   const buildSnapshot = useCallback(
-    (el: HTMLElement): VirtualListStateSnapshot => ({
-      version: 1,
-      scrollOffset: toContentScroll(el.scrollTop),
-      totalCount: data.length,
-    }),
-    [toContentScroll, data.length]
+    (el: HTMLElement | null): VirtualListStateSnapshot => {
+      const contentOffset = el ? toContentScroll(el.scrollTop) : 0;
+      const anchor = virtualizer.getVirtualItemForOffset(contentOffset);
+      return {
+        version: 2,
+        index: anchor?.index ?? 0,
+        totalCount: data.length,
+      };
+    },
+    [toContentScroll, virtualizer, data.length]
   );
 
   const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -799,21 +749,20 @@ export function VirtualList<T>({
     ref,
     (): VirtualListHandle => ({
       scrollToIndex(opts) {
+        // A runtime jump takes the scroll position away from live follow, the
+        // same way a user scrolling away does; otherwise the next streamed row
+        // would pull the viewport back to the tail.
+        if (live && followOutputRef.current) {
+          followUserActedRef.current = true;
+          setFollowOutput(false);
+        }
         const behavior =
           scale > SMOOTH_SCROLL_MAX_S
             ? "auto"
             : (opts.behavior ?? (smoothScroll ? "smooth" : "auto"));
-        if (behavior === "auto") {
-          settleScrollToIndex(opts.index, opts.align, opts.onDone);
-          return;
-        }
-        // Smooth scrolls animate over many frames — settling would fight the
-        // animation, so they stay a single fire.
-        virtualizer.scrollToIndex(opts.index, {
-          align: opts.align,
-          behavior,
-        });
-        opts.onDone?.();
+        programmaticScroll(() =>
+          virtualizer.scrollToIndex(opts.index, { align: opts.align, behavior })
+        );
       },
       scrollTo(opts) {
         const el = getScrollElement();
@@ -825,12 +774,7 @@ export function VirtualList<T>({
         el.scrollTo({ top: opts.top, behavior });
       },
       getState(callback) {
-        const el = getScrollElement();
-        callback({
-          version: 1,
-          scrollOffset: el ? toContentScroll(el.scrollTop) : 0,
-          totalCount: data.length,
-        });
+        callback(buildSnapshot(getScrollElement()));
       },
       jumpToStart() {
         const el = getScrollElement();
@@ -847,11 +791,12 @@ export function VirtualList<T>({
     [
       virtualizer,
       scale,
-      settleScrollToIndex,
+      programmaticScroll,
       smoothScroll,
       getScrollElement,
-      toContentScroll,
-      data.length,
+      buildSnapshot,
+      live,
+      setFollowOutput,
     ]
   );
 
@@ -886,16 +831,16 @@ export function VirtualList<T>({
           return false;
         });
         if (hit) {
-          // Starting a new settle cancels the previous landing while retaining
-          // ownership of the auto-scroll guard until the find landing finishes.
-          settleScrollToIndex(i, "center");
+          programmaticScroll(() =>
+            virtualizer.scrollToIndex(i, { align: "center", behavior: "auto" })
+          );
           setTimeout(onContentReady, 200);
           return Promise.resolve(true);
         }
       }
       return Promise.resolve(false);
     },
-    [data, itemSearchText, settleScrollToIndex]
+    [data, itemSearchText, programmaticScroll, virtualizer]
   );
 
   // Pre-compute lowercased search text for every item once per data /
@@ -983,45 +928,47 @@ export function VirtualList<T>({
       }
     >
       <PaddingChunks height={topPaddingSpacer} prefix="top" />
-      <div style={{ position: "relative", height: renderedBandHeight }}>
-        {items.map((vItem) => {
-          const item = data[vItem.index];
-          if (item === undefined) return null;
-          const top = vItem.start - bandStart;
-          const child = renderRow(vItem.index, item);
-          if (ItemSlot) {
+      <VirtualScrollerContext.Provider value={scroller}>
+        <div style={{ position: "relative", height: renderedBandHeight }}>
+          {items.map((vItem) => {
+            const item = data[vItem.index];
+            if (item === undefined) return null;
+            const top = vItem.start - bandStart;
+            const child = renderRow(vItem.index, item);
+            if (ItemSlot) {
+              return (
+                <div
+                  key={vItem.key}
+                  ref={measureRow}
+                  data-index={vItem.index}
+                  style={{ position: "absolute", top, left: 0, right: 0 }}
+                >
+                  <ItemSlot
+                    data-index={vItem.index}
+                    data-item-index={vItem.index}
+                    data-known-size={vItem.size}
+                    style={{}}
+                  >
+                    {child}
+                  </ItemSlot>
+                </div>
+              );
+            }
             return (
               <div
                 key={vItem.key}
-                ref={virtualizer.measureElement}
+                ref={measureRow}
                 data-index={vItem.index}
+                data-item-index={vItem.index}
+                data-known-size={vItem.size}
                 style={{ position: "absolute", top, left: 0, right: 0 }}
               >
-                <ItemSlot
-                  data-index={vItem.index}
-                  data-item-index={vItem.index}
-                  data-known-size={vItem.size}
-                  style={{}}
-                >
-                  {child}
-                </ItemSlot>
+                {child}
               </div>
             );
-          }
-          return (
-            <div
-              key={vItem.key}
-              ref={virtualizer.measureElement}
-              data-index={vItem.index}
-              data-item-index={vItem.index}
-              data-known-size={vItem.size}
-              style={{ position: "absolute", top, left: 0, right: 0 }}
-            >
-              {child}
-            </div>
-          );
-        })}
-      </div>
+          })}
+        </div>
+      </VirtualScrollerContext.Provider>
       <PaddingChunks height={bottomPaddingSpacer} prefix="bot" />
       {showProgress &&
         (FooterSlot ? (

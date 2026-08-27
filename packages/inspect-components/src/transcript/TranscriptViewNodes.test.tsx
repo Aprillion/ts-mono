@@ -53,9 +53,7 @@ vi.mock("./TranscriptVirtualList", () => ({
     eventCallbacks?: EventPanelCallbacks;
   }) => {
     listHandle.current = {
-      scrollToIndex: ({ onDone }) => {
-        onDone?.();
-      },
+      scrollToIndex: () => {},
       scrollTo: () => {},
       getState: () => {},
       jumpToStart: () => {},

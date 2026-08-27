@@ -1,18 +1,42 @@
 // @vitest-environment jsdom
-import { render } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
+import { useEffect } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { testAssistantMessage } from "@tsmono/inspect-common/testing";
 import type { ChatMessage } from "@tsmono/inspect-common/types";
-import { ExtendedFindProvider } from "@tsmono/react/components";
+import {
+  ComponentIconProvider,
+  ComponentNavigationProvider,
+  ExtendedFindProvider,
+  FindBand,
+  FindTargetProvider,
+  useExtendedFind,
+  type ComponentIcons,
+} from "@tsmono/react/components";
+import { FindProvider, useFindState } from "@tsmono/react/find";
 import { ComponentStateProvider } from "@tsmono/react/state";
 import { makeReactiveStateStore } from "@tsmono/react/testing";
+
+import { DisplayModeContext, type DisplayMode } from "../content";
 
 import {
   ChatViewRowsVirtualList,
   ChatViewVirtualList,
 } from "./ChatViewVirtualList";
-import { buildMessageRows, messageRowOptions } from "./rowsModel";
+import type { FindMessages, MessagesFindQuery } from "./messagesFind";
+import {
+  buildMessageRows,
+  messageRowOptions,
+  type MessageRow,
+} from "./rowsModel";
 
 const messages: ChatMessage[] = [
   testAssistantMessage({ id: "m-1", content: "one" }),
@@ -105,6 +129,245 @@ describe("ChatViewRowsVirtualList paging", () => {
       onLoadMoreRows: () => calls++,
     });
     expect(calls).toBe(0);
+  });
+});
+
+const icons = Object.fromEntries(
+  [
+    "arrowDown",
+    "arrowUp",
+    "chevronDown",
+    "chevronUp",
+    "clearText",
+    "close",
+    "code",
+    "confirm",
+    "copy",
+    "error",
+    "menu",
+    "next",
+    "noSamples",
+    "play",
+    "previous",
+    "toggleRight",
+  ].map((name) => [name, `icon-${name}`])
+) as unknown as ComponentIcons;
+
+describe("ChatViewVirtualList find surface", () => {
+  // jsdom has no layout (or ResizeObserver); give the scroller a viewport so
+  // rows mount.
+  beforeEach(() => {
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      }
+    );
+    vi.spyOn(Element.prototype, "getBoundingClientRect").mockReturnValue(
+      new DOMRect(0, 0, 800, 600)
+    );
+    vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(600);
+    vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockReturnValue(800);
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  // Reports which find engine the list registered with: the coordinator's
+  // active scope, and the legacy counter's answer for text only the rows hold.
+  const Probe = ({ onState }: { onState: (state: string) => void }) => {
+    const { scopeId } = useFindState();
+    const { countAllMatches } = useExtendedFind();
+    useEffect(() => {
+      onState(`${scopeId ?? "none"}/${countAllMatches("one")}`);
+    });
+    return null;
+  };
+
+  const noMatches: FindMessages = () =>
+    Promise.resolve({
+      rows: [],
+      total: { rows: 0, occurrences: 0, relation: "eq" },
+      complete: true,
+    });
+
+  const mount = async (findMessages?: FindMessages) => {
+    const { hooks } = makeReactiveStateStore();
+    let engines = "";
+    const { container } = render(
+      <ComponentStateProvider hooks={hooks}>
+        <ComponentIconProvider icons={icons}>
+          <ComponentNavigationProvider navigation={{ navigate: () => {} }}>
+            <FindProvider>
+              <ExtendedFindProvider>
+                <ChatViewVirtualList
+                  id="chat"
+                  messages={messages}
+                  findMessages={findMessages}
+                />
+                <Probe onState={(state) => (engines = state)} />
+              </ExtendedFindProvider>
+            </FindProvider>
+          </ComponentNavigationProvider>
+        </ComponentIconProvider>
+      </ComponentStateProvider>
+    );
+    await act(async () => {});
+    return {
+      rows: container.querySelectorAll("[data-message-id]").length,
+      anchors: container.querySelectorAll("[data-find-anchor]").length,
+      engines,
+    };
+  };
+
+  it("queries the source under the view configuration it renders with, again when the rows change, and shows the source's No results", async () => {
+    const { hooks } = makeReactiveStateStore();
+    const queries: MessagesFindQuery[] = [];
+    const findMessages: FindMessages = (query) => {
+      queries.push(query);
+      return noMatches(
+        query,
+        { direction: "forward", limit: 1 },
+        new AbortController().signal
+      );
+    };
+    const ui = (rows: MessageRow[], displayMode: DisplayMode = "raw") => (
+      <ComponentStateProvider hooks={hooks}>
+        <ComponentIconProvider icons={icons}>
+          <ComponentNavigationProvider navigation={{ navigate: () => {} }}>
+            <DisplayModeContext.Provider value={{ displayMode }}>
+              <FindProvider>
+                <ExtendedFindProvider>
+                  <FindTargetProvider>
+                    <FindBand onClose={() => {}} />
+                    <ChatViewRowsVirtualList
+                      id="chat"
+                      rows={rows}
+                      findMessages={findMessages}
+                      display={display}
+                      tools={tools}
+                    />
+                  </FindTargetProvider>
+                </ExtendedFindProvider>
+              </FindProvider>
+            </DisplayModeContext.Provider>
+          </ComponentNavigationProvider>
+        </ComponentIconProvider>
+      </ComponentStateProvider>
+    );
+    const display = { unlabeledRoles: ["user"] };
+    const tools = { callStyle: "compact" as const };
+    const rows = buildMessageRows(messages, messageRowOptions(tools));
+    const { rerender } = render(ui(rows));
+    fireEvent.change(screen.getByPlaceholderText("Find"), {
+      target: { value: "one" },
+    });
+    await waitFor(() => expect(queries).toHaveLength(1));
+    expect(queries[0]).toEqual({
+      text: "one",
+      projection: {
+        unlabeledRoles: ["user"],
+        toolCallStyle: "compact",
+        displayMode: "raw",
+      },
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId("find-band-match-count").textContent).toBe(
+        "No results"
+      )
+    );
+
+    // Same messages, new row objects (a live poll): the term is re-queried.
+    const polled = [...rows];
+    rerender(ui(polled));
+    await waitFor(() => expect(queries).toHaveLength(2));
+
+    // The raw/rendered toggle changes what the rows show: re-queried too.
+    rerender(ui(polled, "rendered"));
+    await waitFor(() => expect(queries).toHaveLength(3));
+    expect(queries[2]?.projection.displayMode).toBe("rendered");
+  });
+
+  it("loads pages through a matching row beyond the loaded prefix before revealing it", async () => {
+    const { hooks } = makeReactiveStateStore();
+    const all: ChatMessage[] = Array.from({ length: 6 }, (_, i) =>
+      testAssistantMessage({ id: `m-${i}`, content: `msg ${i}` })
+    );
+    const rows = buildMessageRows(all, messageRowOptions());
+    const onLoadMoreRows = vi.fn();
+    const findMessages: FindMessages = () =>
+      Promise.resolve({
+        rows: [
+          {
+            anchor: { id: "m-5" },
+            count: 1,
+            texts: ["msg 5"],
+            index: 5,
+          },
+        ],
+        complete: true,
+        total: { rows: 1, occurrences: 1, relation: "eq" },
+      });
+    const ui = (loaded: number) => (
+      <ComponentStateProvider hooks={hooks}>
+        <ComponentIconProvider icons={icons}>
+          <ComponentNavigationProvider navigation={{ navigate: () => {} }}>
+            <FindProvider>
+              <ExtendedFindProvider>
+                <FindTargetProvider>
+                  <FindBand onClose={() => {}} />
+                  <ChatViewRowsVirtualList
+                    id="chat"
+                    rows={rows.slice(0, loaded)}
+                    hasMoreRows={loaded < rows.length}
+                    onLoadMoreRows={onLoadMoreRows}
+                    findMessages={findMessages}
+                  />
+                </FindTargetProvider>
+              </ExtendedFindProvider>
+            </FindProvider>
+          </ComponentNavigationProvider>
+        </ComponentIconProvider>
+      </ComponentStateProvider>
+    );
+    const { container, rerender } = render(ui(2));
+    const scrollTops: number[] = [];
+    Element.prototype.scrollTo = function (options?: ScrollToOptions | number) {
+      if (typeof options === "object" && options.top !== undefined) {
+        scrollTops.push(options.top);
+      }
+    };
+    onLoadMoreRows.mockClear();
+    fireEvent.change(within(container).getByPlaceholderText("Find"), {
+      target: { value: "msg 5" },
+    });
+    await waitFor(() => expect(onLoadMoreRows).toHaveBeenCalled());
+    rerender(ui(4));
+    await waitFor(() =>
+      expect(onLoadMoreRows.mock.calls.length).toBeGreaterThan(1)
+    );
+    expect(scrollTops).toEqual([]);
+    rerender(ui(6));
+    // The pending reveal jumps the list to the row once it is loaded.
+    await waitFor(() => expect(scrollTops).not.toEqual([]));
+    expect(
+      within(container).getByTestId("find-band-match-count").textContent
+    ).toBe("1 of 1");
+    await waitFor(() =>
+      expect(container.querySelector('[data-find-anchor="m-5"]')).not.toBeNull()
+    );
+  });
+
+  it("registers with exactly one find engine: the coordinator for a host with a scope, the legacy counter otherwise", async () => {
+    expect(await mount()).toEqual({ rows: 2, anchors: 0, engines: "none/1" });
+    expect(await mount(noMatches)).toEqual({
+      rows: 2,
+      anchors: 2,
+      engines: "messages/0",
+    });
   });
 });
 
