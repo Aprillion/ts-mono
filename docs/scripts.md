@@ -14,11 +14,10 @@
 
 - Define the **leaf command** for each task (e.g. `"lint": "eslint . --max-warnings 0"`)
 - Never re-implement Turbo's orchestration — no `pnpm lint && pnpm typecheck` inside a `check` script
-- Composite scripts like `check` should be `"true"` (no-op) since all composition lives in `turbo.json`'s `dependsOn`
 
-### Why `check` scripts exist but are no-ops
+### Why `check` has no workspace scripts
 
-Turbo only runs a task's `dependsOn` chain for workspaces that have the task defined. A workspace without a `check` script won't get its `lint` or `typecheck` run as part of `turbo run check`. So every workspace that should participate in `check` must have `"check": "true"`.
+`check` exists only in `turbo.json`; no workspace defines the script. Turbo runs a scriptless task's `dependsOn` chain anyway, so `turbo run check` schedules `lint`, `typecheck`, and `format:check` in every workspace that defines them.
 
 ## Current task graph
 
@@ -27,7 +26,7 @@ turbo run check
 ├── lint          (all workspaces, in parallel)
 ├── typecheck     (all workspaces, in parallel)
 ├── format:check  (workspaces that have it, in parallel)
-└── check         (no-op, runs after all above complete)
+└── check         (scriptless; composition only)
 ```
 
 `build` `dependsOn: ["^build", "generate:css"]`; `lint` and `typecheck` both `dependsOn: ["generate:css", "^generate:css"]`, so CSS-module typings (own and upstream) exist first.
@@ -50,6 +49,5 @@ where a reviewer sees it. There is no repo-wide backlog to add to.
 
 ## Adding a new workspace
 
-1. Define leaf scripts: `lint`, `typecheck`, `test` (and `format:check` if the package has its own Prettier config; `generate:css` if it has CSS modules)
-2. Add `"check": "true"` so Turbo includes it in `turbo run check`
-3. Do **not** add orchestration logic to the workspace's scripts — that's Turbo's job
+1. Define leaf scripts: `lint`, `typecheck`, `test` (and `format:check` if the package has its own Prettier config; `generate:css` if it has CSS modules) — `turbo run check` picks them up automatically
+2. Do **not** add orchestration logic to the workspace's scripts — that's Turbo's job
