@@ -5,13 +5,16 @@ import {
   memo,
   ReactNode,
   useCallback,
-  useLayoutEffect,
   useRef,
   useState,
 } from "react";
 
 import { useFindState } from "../find/FindCoordinatorContext";
-import { useCollapsedState, useResizeObserver } from "../hooks";
+import {
+  useCollapsedState,
+  useResizeObserver,
+  useSubtreeContains,
+} from "../hooks";
 
 import styles from "./ExpandablePanel.module.css";
 import { useFindTarget } from "./FindTargetContext";
@@ -70,34 +73,11 @@ export const ExpandablePanel: FC<ExpandablePanelProps> = memo(
     // panel holding one of them expands; without a source the typed term is
     // compared case-insensitively.
     const { variants } = useFindState();
-    // Mounts collapsed and decides before paint: a panel that expanded
-    // optimistically and then collapsed would move the match a find row just
-    // centred against the mount layout. Pre-paint, so no flash either way.
-    const [containsFindTarget, setContainsFindTarget] = useState(false);
-
-    // No dep array: intentionally re-runs after every render so that changes
-    // in children text (e.g. lazily loaded content) are picked up without an
-    // additional mechanism.
-    // eslint-disable-next-line react-hooks/exhaustive-deps, tsmono/no-raw-use-effect -- intentional: re-run after every render to track subtree text changes
-    useLayoutEffect(() => {
-      if (!findTarget) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing React state with DOM subtree text; no external subscription possible
-        setContainsFindTarget(false);
-        return;
-      }
-      const root = contentRef.current;
-      if (!root) {
-        setContainsFindTarget(false);
-        return;
-      }
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-      const text = root.textContent ?? "";
-      setContainsFindTarget(
-        variants.length > 0
-          ? variants.some((variant) => text.includes(variant))
-          : text.toLowerCase().includes(findTarget.term.toLowerCase())
-      );
-    });
+    const containsFindTarget = useSubtreeContains(
+      contentRef,
+      variants,
+      findTarget?.term
+    );
 
     const effectiveCollapsed = containsFindTarget ? false : collapsed;
 

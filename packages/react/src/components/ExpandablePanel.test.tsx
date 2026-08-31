@@ -211,4 +211,26 @@ describe("ExpandablePanel auto-expand on find target", () => {
     captured.coordinator!.setTerm("cafe");
     await waitFor(() => expect(isTruncated(container)).toBe(false));
   });
+
+  it("expands when matching text appears after mount (lazy subtree)", async () => {
+    const LateNeedle = () => {
+      const [ready, setReady] = useState(false);
+      useEffect(() => {
+        setReady(true);
+      }, []);
+      return ready ? (
+        <p>{"wondering needle ".repeat(50)}</p>
+      ) : (
+        <p>{"placeholder ".repeat(50)}</p>
+      );
+    };
+    const { container } = render(
+      <Wrapper findTarget={{ term: "wondering", eventId: "e1" }}>
+        <ExpandablePanel id="p-late" collapse={true} lines={5}>
+          <LateNeedle />
+        </ExpandablePanel>
+      </Wrapper>
+    );
+    await waitFor(() => expect(isTruncated(container)).toBe(false));
+  });
 });
