@@ -8,7 +8,8 @@
   background-color: var(--inspect-find-background);
   font-size: 0.9rem;
   display: grid;
-  grid-template-columns: auto auto auto auto auto;
+  /* Count column stays reserved empty↔first-letter so the band does not grow. */
+  grid-template-columns: auto minmax(11ch, max-content) auto auto auto;
   column-gap: 0.2em;
   padding: 0.2rem;
   border-bottom: solid 1px var(--bs-light-border-subtle);
@@ -32,6 +33,7 @@
   margin-top: auto;
   margin-bottom: auto;
   margin-right: 0.5em;
+  min-width: 11ch;
   white-space: nowrap;
   color: var(--inspect-find-foreground);
   opacity: 0.7;

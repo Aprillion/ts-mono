@@ -32,5 +32,5 @@ export * from "./useMountEffect";
 export * from "./useOnClickOutside";
 export * from "./useTimeout";
 export * from "./useUnmount";
-export * from "./useSubtreeContains";
+export * from "./useExpandWhenFindBelowFold";
 export * from "./usePendingFindReveal";

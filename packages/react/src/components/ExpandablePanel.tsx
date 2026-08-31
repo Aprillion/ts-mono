@@ -9,11 +9,10 @@ import {
   useState,
 } from "react";
 
-import { useFindState } from "../find/FindCoordinatorContext";
 import {
   useCollapsedState,
+  useExpandWhenFindBelowFold,
   useResizeObserver,
-  useSubtreeContains,
 } from "../hooks";
 
 import styles from "./ExpandablePanel.module.css";
@@ -44,6 +43,8 @@ export const ExpandablePanel: FC<ExpandablePanelProps> = memo(
     const [showToggle, setShowToggle] = useState(false);
     const rootFontSizeRef = useRef<number>(0);
 
+    const [foldPx, setFoldPx] = useState(() => 16 * lines);
+
     const checkOverflow = useCallback(
       (entry: ResizeObserverEntry) => {
         const element = entry.target;
@@ -59,6 +60,7 @@ export const ExpandablePanel: FC<ExpandablePanelProps> = memo(
           rootFontSizeRef.current = parseFloat(rootStyle.fontSize);
         }
         const maxCollapsedHeight = rootFontSizeRef.current * lines;
+        setFoldPx(maxCollapsedHeight);
         const contentHeight = element.scrollHeight;
 
         // 1px tolerance guards against sub-pixel rounding.
@@ -69,17 +71,13 @@ export const ExpandablePanel: FC<ExpandablePanelProps> = memo(
     const contentRef = useResizeObserver(checkOverflow);
 
     const findTarget = useFindTarget();
-    // The texts a find source matched (e.g. "café" for a typed "cafe"): a
-    // panel holding one of them expands; without a source the typed term is
-    // compared case-insensitively.
-    const { variants } = useFindState();
-    const containsFindTarget = useSubtreeContains(
+    const expandForFind = useExpandWhenFindBelowFold(
       contentRef,
-      variants,
+      foldPx,
       findTarget?.term
     );
 
-    const effectiveCollapsed = containsFindTarget ? false : collapsed;
+    const effectiveCollapsed = expandForFind ? false : collapsed;
 
     // `overflow: hidden` + `maxHeight` live on the inner content wrapper, not
     // the outer panel. Two reasons:
@@ -154,7 +152,7 @@ export const ExpandablePanel: FC<ExpandablePanelProps> = memo(
             <div className={styles.inlineToggleHolder}>
               <div className={styles.inlineToggleSticky}>
                 <MoreToggle
-                  collapsed={collapsed}
+                  collapsed={effectiveCollapsed}
                   onToggle={handleToggle}
                   border={!border}
                   position="inline-right"
@@ -165,7 +163,7 @@ export const ExpandablePanel: FC<ExpandablePanelProps> = memo(
         </div>
         {showToggle && layout === "block-left" && (
           <MoreToggle
-            collapsed={collapsed}
+            collapsed={effectiveCollapsed}
             onToggle={handleToggle}
             border={!border}
             position="block-left"

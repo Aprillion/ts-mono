@@ -1,1 +1,6 @@
-export { useFindHighlights, variantsPattern } from "../hooks/useFindHighlights";
+export {
+  useFindHighlights,
+  variantsPattern,
+  computeRowRanges,
+  encodeTexts,
+} from "../hooks/useFindHighlights";

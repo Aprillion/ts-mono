@@ -1,11 +1,6 @@
 import { RefObject, useId, useLayoutEffect, useRef } from "react";
 
 import {
-  useVirtualScroller,
-  type VirtualScroller,
-} from "../virtual/VirtualScrollerContext";
-
-import {
   useFindCoordinatorOptional,
   useFindState,
 } from "../find/FindCoordinatorContext";
@@ -16,6 +11,10 @@ import {
   supportsCustomHighlights,
 } from "../find/highlightRegistry";
 import { findScrollableParent, scrollRangeToCenter } from "../find/rangeScroll";
+import {
+  useVirtualScroller,
+  type VirtualScroller,
+} from "../virtual/VirtualScrollerContext";
 
 // Per-row cap on painted ranges (matches beyond it still count). A guess,
 // not calibrated; bounds Range churn on megabyte tool outputs.
@@ -169,7 +168,7 @@ export function useFindHighlights(
   ]);
 }
 
-const encodeTexts = (texts: string[]): string =>
+export const encodeTexts = (texts: string[]): string =>
   texts.map((text) => `${text.length}:${text}`).join("");
 
 const decodeTexts = (key: string): string[] => {
@@ -226,7 +225,7 @@ function collectRowSegments(root: Element): {
 
 /** Occurrences of the pattern in the row's rendered text as DOM Ranges (may
  *  span element boundaries). */
-function computeRowRanges(
+export function computeRowRanges(
   root: Element,
   pattern: RegExp | null,
   activeOccurrence: number | null

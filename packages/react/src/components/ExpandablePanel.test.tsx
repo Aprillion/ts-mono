@@ -96,6 +96,25 @@ const longContent = (
 // an `effectiveCollapsed=true` panel sets it to `${lines}rem`, an expanded
 // panel leaves it empty. Asserting on the inline style sidesteps the CSS
 // module classname (which would change if the rule were renamed).
+function clientRectList(rect: DOMRect): DOMRectList {
+  return Object.assign([rect], {
+    item: (i: number) => (i === 0 ? rect : null),
+  }) as DOMRectList;
+}
+
+async function withRangeClientRects(
+  rects: DOMRectList,
+  run: () => Promise<void>
+): Promise<void> {
+  const previous = Range.prototype.getClientRects;
+  Range.prototype.getClientRects = () => rects;
+  try {
+    await run();
+  } finally {
+    Range.prototype.getClientRects = previous;
+  }
+}
+
 function isTruncated(container: HTMLElement): boolean {
   const wrap = container.querySelector(
     '[data-expandable-panel="true"]'
@@ -108,7 +127,7 @@ describe("ExpandablePanel auto-expand on find target", () => {
   it.each([
     { name: "no target → truncated", target: null, expectTruncated: true },
     {
-      name: "matching target → expanded",
+      name: "matching target without a find-anchor still expands (legacy window.find)",
       target: { term: "wondering", eventId: "e1" },
       expectTruncated: false,
     },
@@ -181,14 +200,65 @@ describe("ExpandablePanel auto-expand on find target", () => {
       <FindProvider>
         <Probe />
         <Wrapper findTarget={{ term: "cafe", eventId: "e1" }}>
-          <ExpandablePanel id="p" collapse={true} lines={5}>
-            {"café au lait ".repeat(50)}
-          </ExpandablePanel>
+          <div data-find-anchor="r">
+            <ExpandablePanel id="p" collapse={true} lines={5}>
+              {"café au lait ".repeat(50)}
+            </ExpandablePanel>
+          </div>
         </Wrapper>
       </FindProvider>
     );
     await waitFor(() => expect(isTruncated(container)).toBe(true));
 
+    await withRangeClientRects(
+      clientRectList(new DOMRect(0, 200, 40, 16)),
+      async () => {
+        captured.coordinator!.registerSurface({
+          scopeId: "test",
+          source: {
+            find: () =>
+              Promise.resolve({
+                rows: [
+                  {
+                    anchor: { id: "r" },
+                    count: 1,
+                    texts: ["café"],
+                    index: 0,
+                  },
+                ],
+                complete: true,
+                total: { rows: 1, occurrences: 1, relation: "eq" },
+              }),
+          },
+          reveal: () => {},
+        });
+        captured.coordinator!.setTerm("cafe");
+        await waitFor(() => expect(isTruncated(container)).toBe(false));
+      }
+    );
+  });
+
+  it("does not grow a find-anchor row when the first letter matches in the visible fold", async () => {
+    const captured: { coordinator?: FindCoordinator } = {};
+    const Probe = () => {
+      const coordinator = useFindCoordinatorOptional();
+      useEffect(() => {
+        captured.coordinator = coordinator ?? undefined;
+      }, [coordinator]);
+      return null;
+    };
+    const { container } = render(
+      <FindProvider>
+        <Probe />
+        <Wrapper findTarget={{ term: "c", eventId: "e1" }}>
+          <div data-find-anchor="r">
+            <ExpandablePanel id="p-fold" collapse={true} lines={5}>
+              {longContent}
+            </ExpandablePanel>
+          </div>
+        </Wrapper>
+      </FindProvider>
+    );
     captured.coordinator!.registerSurface({
       scopeId: "test",
       source: {
@@ -198,7 +268,7 @@ describe("ExpandablePanel auto-expand on find target", () => {
               {
                 anchor: { id: "r" },
                 count: 1,
-                texts: ["café"],
+                texts: ["c"],
                 index: 0,
               },
             ],
@@ -208,8 +278,13 @@ describe("ExpandablePanel auto-expand on find target", () => {
       },
       reveal: () => {},
     });
-    captured.coordinator!.setTerm("cafe");
-    await waitFor(() => expect(isTruncated(container)).toBe(false));
+    await withRangeClientRects(
+      clientRectList(new DOMRect(0, 20, 40, 16)),
+      async () => {
+        captured.coordinator!.setTerm("c");
+        await waitFor(() => expect(isTruncated(container)).toBe(true));
+      }
+    );
   });
 
   it("expands when matching text appears after mount (lazy subtree)", async () => {

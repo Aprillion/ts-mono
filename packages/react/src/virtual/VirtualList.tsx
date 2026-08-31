@@ -525,7 +525,6 @@ export function VirtualList<T>({
     [virtualizer, getScrollElement]
   );
   useUnmount(() => {
-    cancelAnimationFrame(settleFrameRef.current);
     cancelAnimationFrame(releaseFrameRef.current);
   });
   const scroller = useMemo<VirtualScroller>(
