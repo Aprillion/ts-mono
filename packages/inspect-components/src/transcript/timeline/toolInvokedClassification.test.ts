@@ -17,8 +17,6 @@ import {
   testModelEvent,
   testModelOutput,
   testModelUsage,
-  testSpanBeginEvent,
-  testSpanEndEvent,
   testSystemMessage,
   testToolCall,
   testToolEvent,
@@ -28,41 +26,9 @@ import type { Event } from "@tsmono/inspect-common/types";
 
 import { buildTimeline, TimelineSpan } from "./core";
 import { computeFlatSwimlaneRows } from "./swimlaneRows";
+import { rawEventBuilders } from "./testHelpers";
 
-let clock = 0;
-function ts(): string {
-  // distinct, monotonically increasing ISO timestamps
-  clock += 1;
-  return new Date(Date.UTC(2026, 0, 1, 0, 0, clock)).toISOString();
-}
-
-const base = () => ({
-  uuid: null,
-  timestamp: ts(),
-  working_start: 0,
-  pending: false,
-  metadata: null,
-});
-
-function spanBegin(
-  id: string,
-  name: string,
-  type: string | null,
-  parentId: string | null
-): Event {
-  return testSpanBeginEvent({
-    ...base(),
-    id,
-    name,
-    type,
-    parent_id: parentId,
-    span_id: null,
-  });
-}
-
-function spanEnd(id: string): Event {
-  return testSpanEndEvent({ ...base(), id, span_id: null });
-}
+const { nextTs, base, spanBegin, spanEnd } = rawEventBuilders();
 
 function modelTurn(
   spanId: string,
@@ -78,7 +44,7 @@ function modelTurn(
   return testModelEvent({
     ...base(),
     model: "mockllm/model",
-    completed: ts(),
+    completed: nextTs(),
     span_id: spanId,
     input: [
       testSystemMessage({ content: systemPrompt }),
@@ -101,7 +67,7 @@ function dispatchToolEvent(spanId: string): Event {
     ...base(),
     id: "call_1",
     function: "agent",
-    completed: ts(),
+    completed: nextTs(),
     agent: null,
     events: [],
     span_id: spanId,
