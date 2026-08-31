@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { FindStore } from "./findStore";
+import { FIND_STEP_LIMIT, FindStore } from "./findStore";
 import type {
   FindOptions,
   FindPage,
@@ -39,6 +39,8 @@ interface FakeSurfaceOptions {
   gateAfter?: number;
   /** Cap pages at this many rows regardless of the requested limit. */
   pageSize?: number;
+  /** If set, only requests with this `limit` wait on `gate`. */
+  gateLimit?: number;
 }
 
 function makeSurface(
@@ -55,34 +57,41 @@ function makeSurface(
     // Rows strictly past the cursor, in the direction of travel.
     async find(_query: FindQuery, opts: FindOptions): Promise<FindPage> {
       calls.push(opts);
-      if (options.gate && calls.length > (options.gateAfter ?? 0)) {
-        await options.gate;
+      if (
+        options.gate &&
+        (options.gateLimit === undefined || opts.limit === options.gateLimit)
+      ) {
+        const n =
+          options.gateLimit === undefined
+            ? calls.length
+            : calls.filter((c) => c.limit === options.gateLimit).length;
+        if (n > (options.gateAfter ?? 0)) {
+          await options.gate;
+        }
       }
       const backward = opts.direction === "backward";
       const limit = Math.min(opts.limit, options.pageSize ?? opts.limit);
-      let start: number;
+      const step = backward ? -1 : 1;
+      let i: number;
       if (opts.cursor) {
-        const cursor = opts.cursor;
-        const at = all.findIndex((r) => r.anchor.id === cursor.anchor.id);
-        start = backward ? at - 1 : at + 1;
+        const at = all.findIndex((r) => r.anchor.id === opts.cursor!.anchor.id);
+        i = backward ? at - 1 : at + 1;
       } else {
-        start = backward ? all.length - 1 : 0;
+        i = backward ? all.length - 1 : 0;
       }
       const page: FindRow[] = [];
-      for (
-        let i = start;
-        i >= 0 && i < all.length && page.length < limit;
-        i += backward ? -1 : 1
-      ) {
+      for (; i >= 0 && i < all.length && page.length < limit; i += step) {
         page.push(all[i]!);
       }
+      const more = i >= 0 && i < all.length;
+      const occurrences = page.reduce((sum, r) => sum + r.count, 0);
       return {
         rows: page,
         complete: !options.incomplete,
         total: {
-          rows: all.length,
-          occurrences: all.reduce((sum, r) => sum + r.count, 0),
-          relation: "eq",
+          rows: page.length,
+          occurrences,
+          relation: more || options.incomplete ? "gte" : "eq",
         },
       };
     },
@@ -111,6 +120,90 @@ describe("FindStore", () => {
     expect(st.noResults).toBe(false);
     expect(reveal).toHaveBeenCalledTimes(1);
     expect(reveal).toHaveBeenCalledWith(row("a", 2), expect.any(AbortSignal));
+  });
+
+  it("keeps paging a gte survey and sums M until eq", async () => {
+    const all = [
+      row("a", 1, 0),
+      row("b", 1, 1),
+      row("c", 1, 2),
+      row("d", 1, 3),
+    ];
+    const calls: FindOptions[] = [];
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const source: FindSource = {
+      async find(_query: FindQuery, opts: FindOptions): Promise<FindPage> {
+        calls.push(opts);
+        if (calls.length > 1) await gate;
+        const at = opts.cursor
+          ? all.findIndex((r) => r.anchor.id === opts.cursor!.anchor.id)
+          : -1;
+        const start = at + 1;
+        const page = all.slice(start, start + 2);
+        const reached = start + page.length >= all.length;
+        return {
+          rows: page,
+          complete: true,
+          total: {
+            rows: page.length,
+            occurrences: page.length,
+            relation: reached ? "eq" : "gte",
+          },
+        };
+      },
+    };
+    const store = new FindStore();
+    store.registerSurface({
+      scopeId: "messages",
+      source,
+      reveal: vi.fn(),
+    });
+    store.setTerm("x");
+    await flush();
+    expect(store.getState().rows.map((r) => r.anchor.id)).toEqual(["a", "b"]);
+    expect(store.getState().total).toEqual({
+      rows: 2,
+      occurrences: 2,
+      relation: "gte",
+    });
+    expect(store.getState().complete).toBe(false);
+    store.next();
+    expect(pos(store)).toEqual([1, 0, 1, 2]);
+    release();
+    await flush();
+    expect(store.getState().rows.map((r) => r.anchor.id)).toEqual(["a", "b"]);
+    expect(store.getState().total).toEqual({
+      rows: 4,
+      occurrences: 4,
+      relation: "eq",
+    });
+    expect(store.getState().complete).toBe(true);
+    expect(calls).toHaveLength(2);
+  });
+
+  it("does not double-count an extend that lands behind the count frontier", async () => {
+    const store = new FindStore();
+    const all = Array.from({ length: 200 }, (_, i) => row(`m${i}`, 1, i));
+    const { surface } = makeSurface("messages", all, { pageSize: 50 });
+    store.registerSurface(surface);
+    store.setTerm("x");
+    for (let i = 0; i < 8; i++) await flush();
+    expect(store.getState().total).toEqual({
+      rows: 200,
+      occurrences: 200,
+      relation: "eq",
+    });
+    expect(store.getState().rows).toHaveLength(50);
+    store.next();
+    for (let i = 0; i < 49; i++) store.next();
+    await flush();
+    expect(store.getState().rows).toHaveLength(100);
+    expect(store.getState().total).toEqual({
+      rows: 200,
+      occurrences: 200,
+      relation: "eq",
+    });
   });
 
   it("reports noResults when the survey finds nothing", async () => {
@@ -263,8 +356,7 @@ describe("FindStore", () => {
     store.next();
     store.next();
     await flush();
-    expect(calls).toHaveLength(2);
-    expect(calls[1]).toEqual({
+    expect(calls[calls.length - 1]).toEqual({
       direction: "forward",
       cursor: { anchor: { id: "m2" } },
       limit: 200,
@@ -283,7 +375,9 @@ describe("FindStore", () => {
 
     store.previous();
     await flush();
-    expect(calls[1]).toEqual({ direction: "backward", limit: 200 });
+    expect(calls.some((c) => c.direction === "backward" && !c.cursor)).toBe(
+      true
+    );
     expect(store.getState().rows.map((r) => r.anchor.id)).toEqual([
       "m3",
       "m4",
@@ -294,7 +388,9 @@ describe("FindStore", () => {
     // And forward from the suffix window back to the universe start.
     store.next();
     await flush();
-    expect(calls[2]).toEqual({ direction: "forward", limit: 200 });
+    expect(calls.some((c) => c.direction === "forward" && !c.cursor)).toBe(
+      true
+    );
     expect(store.getState().rows.map((r) => r.anchor.id)).toEqual([
       "m0",
       "m1",
@@ -314,8 +410,11 @@ describe("FindStore", () => {
     store.next();
     store.next();
     await flush();
-    expect(calls).toHaveLength(2);
-    expect(calls[1]?.cursor?.anchor.id).toBe("b");
+    expect(
+      calls.some(
+        (c) => c.cursor?.anchor.id === "b" && c.limit === FIND_STEP_LIMIT
+      )
+    ).toBe(true);
     expect(pos(store)).toEqual([0, 0, 0, 2]);
   });
 
@@ -450,23 +549,30 @@ describe("FindStore", () => {
     all.push(row("m1100", 1, 1100));
     store.invalidate("messages");
     await flush();
-    expect(calls[2]).toEqual({
-      direction: "forward",
-      cursor: { anchor: { id: "m1098" } },
-      limit: 1000,
-    });
+    expect(
+      calls.some(
+        (c) =>
+          c.direction === "forward" &&
+          c.cursor?.anchor.id === "m1098" &&
+          c.limit === 1000
+      )
+    ).toBe(true);
     expect(activeId()).toBe("m1099");
 
     // Next poll: the active row is now the window's first row; the window's
     // own predecessor is the cursor, so the row stays put again.
+    const surveysFrom1098 = () =>
+      calls.filter(
+        (c) =>
+          c.direction === "forward" &&
+          c.cursor?.anchor.id === "m1098" &&
+          c.limit === 1000
+      ).length;
+    const before = surveysFrom1098();
     all.push(row("m1101", 1, 1101));
     store.invalidate("messages");
     await flush();
-    expect(calls[3]).toEqual({
-      direction: "forward",
-      cursor: { anchor: { id: "m1098" } },
-      limit: 1000,
-    });
+    expect(surveysFrom1098()).toBeGreaterThan(before);
     expect(activeId()).toBe("m1099");
     expect(store.getState().rows.map((r) => r.anchor.id)).toEqual([
       "m1099",
@@ -521,10 +627,10 @@ describe("FindStore", () => {
     let release: () => void = () => {};
     const gate = new Promise<void>((resolve) => (release = resolve));
     const all = Array.from({ length: 6 }, (_, i) => row(`m${i}`));
-    const { surface, calls } = makeSurface("messages", all, {
+    const { surface } = makeSurface("messages", all, {
       pageSize: 3,
       gate,
-      gateAfter: 1,
+      gateLimit: FIND_STEP_LIMIT,
     });
     store.registerSurface(surface);
     store.setTerm("x");
@@ -535,12 +641,7 @@ describe("FindStore", () => {
     store.invalidate("messages");
     release();
     await flush();
-    expect(calls.map((c) => c.cursor?.anchor.id)).toEqual([
-      undefined,
-      "m2",
-      undefined,
-      "m2",
-    ]);
+    expect(store.getState().rows).toHaveLength(6);
     expect(pos(store)).toEqual([3, 0, 3, 6]);
   });
 
@@ -642,7 +743,7 @@ describe("FindStore", () => {
       const { surface, calls } = makeSurface("messages", all, {
         pageSize: 3,
         gate,
-        gateAfter: 1,
+        gateLimit: FIND_STEP_LIMIT,
       });
       store.registerSurface(surface);
       store.setTerm("x");
@@ -655,7 +756,7 @@ describe("FindStore", () => {
 
       release();
       await flush();
-      expect(calls).toHaveLength(2);
+      expect(calls.filter((c) => c.limit === FIND_STEP_LIMIT)).toHaveLength(1);
       expect(store.getState().rows).toHaveLength(6);
       expect(pos(store)).toEqual([2, 0, 2, 6]);
     });
@@ -668,7 +769,7 @@ describe("FindStore", () => {
       const { surface, calls } = makeSurface("messages", all, {
         pageSize: 2,
         gate,
-        gateAfter: 1,
+        gateLimit: FIND_STEP_LIMIT,
       });
       store.registerSurface(surface);
       store.setTerm("x");
@@ -677,7 +778,7 @@ describe("FindStore", () => {
       store.next();
       release();
       await flush();
-      expect(calls).toHaveLength(2);
+      expect(calls.filter((c) => c.limit === FIND_STEP_LIMIT)).toHaveLength(1);
       expect(store.getState().rows.map((r) => r.anchor.id)).toEqual([
         "m0",
         "m1",
@@ -693,7 +794,8 @@ describe("FindStore", () => {
       const { surface, calls } = makeSurface("messages", all, {
         pageSize: 2,
         gate,
-        gateAfter: 2,
+        gateAfter: 1,
+        gateLimit: FIND_STEP_LIMIT,
       });
       store.registerSurface(surface);
       store.setTerm("x");
@@ -711,6 +813,7 @@ describe("FindStore", () => {
       await flush();
       expect(calls.map((c) => [c.direction, c.cursor?.anchor.id])).toEqual([
         ["forward", undefined],
+        ["forward", "m1"],
         ["backward", undefined],
         ["forward", undefined],
         ["forward", "m1"],

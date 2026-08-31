@@ -38,14 +38,17 @@ interface ActivePosition {
  * The registered FindSurface plus the query, row window and navigation state.
  *
  * `rows` is a contiguous run of matching rows in scope order. A term change
- * surveys forward from the top; stepping inside the window is local, past an
- * edge it pages with a cursor, past a known universe edge it re-windows from
- * the opposite end. At most one page is in flight; steps taken meanwhile
- * accumulate as a signed count and apply when the page commits (a re-survey
- * keeps them, a term change drops them). Inside a row the step count is its
- * DOM match count while it is mounted and has reported, the source's count
- * otherwise; a row rendering none of its matches is skipped. "N of M" stays
- * in source counts (see `ordinal`).
+ * surveys forward from the top and keeps that page as the window; while the
+ * source reports `gte`, further pages add to M only. Stepping inside the
+ * window is local, past an edge it pages with a cursor, past a known
+ * universe edge it re-windows from the opposite end. Window fetches and the
+ * count scan abort each other so at most one of each is in flight; steps
+ * taken during a *window* fetch accumulate as a signed count and apply when
+ * that page commits (a re-survey keeps them, a term change drops them).
+ * Local steps are not blocked by the count scan. Inside a row the step
+ * count is its DOM match count while it is mounted and has reported, the
+ * source's count otherwise; a row rendering none of its matches is skipped.
+ * "N of M" stays in source counts (see `ordinal`).
  */
 export class FindStore implements FindCoordinator {
   private state: FindState = FIND_IDLE_STATE;
@@ -65,6 +68,12 @@ export class FindStore implements FindCoordinator {
   private mounted = new Set<string>();
   private domCounts = new Map<string, number>();
   private inflight: AbortController | null = null;
+  private countAbort: AbortController | null = null;
+  /** Last row included in `serverTotal`; count resumes strictly after it. */
+  private countThrough: FindAnchor | null = null;
+  /** Anchors already folded into `serverTotal`. Extend can land behind the
+   *  count scan; membership, not scan order, is what prevents a second add. */
+  private countedIds = new Set<string>();
   private revealAbort: AbortController | null = null;
   /** Steps taken while a page is in flight: +1 forward, -1 backward. */
   private pending = 0;
@@ -228,6 +237,7 @@ export class FindStore implements FindCoordinator {
   private abortAll(): void {
     this.inflight?.abort();
     this.inflight = null;
+    this.stopCount();
     this.revealAbort?.abort();
     this.revealAbort = null;
     this.pending = 0;
@@ -244,6 +254,8 @@ export class FindStore implements FindCoordinator {
     this.windowAtStart = true;
     this.windowAtEnd = false;
     this.windowBefore = null;
+    this.countThrough = null;
+    this.countedIds.clear();
   }
 
   // ---- Querying ---------------------------------------------------------
@@ -258,6 +270,7 @@ export class FindStore implements FindCoordinator {
     const surface = this.surface;
     if (!surface) return;
     this.inflight?.abort();
+    this.stopCount();
     const ac = new AbortController();
     this.inflight = ac;
     surface.source
@@ -266,10 +279,9 @@ export class FindStore implements FindCoordinator {
         (page) => {
           if (this.inflight !== ac) return;
           this.inflight = null;
-          this.serverTotal = page.total;
-          this.complete = page.complete;
           onPage(page);
           this.drain();
+          if (!this.inflight) this.resumeCount();
         },
         () => {
           if (this.inflight !== ac) return;
@@ -300,48 +312,142 @@ export class FindStore implements FindCoordinator {
       { direction: "forward", cursor, limit: FIND_SURVEY_LIMIT },
       (page) => {
         this.rows = page.rows;
+        this.serverTotal = { ...page.total };
+        this.countedIds = new Set(page.rows.map((row) => row.anchor.id));
+        const last = page.rows[page.rows.length - 1];
+        this.countThrough = last?.anchor ?? null;
         this.windowAtStart = cursor === undefined;
         this.windowBefore = cursor?.anchor ?? null;
-        this.windowAtEnd = this.coversEdge(
-          page,
-          page.rows.length,
-          this.windowAtStart
-        );
+        this.complete = page.complete && page.total.relation === "eq";
+        this.windowAtEnd = page.total.relation === "eq";
         this.noResults =
-          page.complete &&
-          page.total.occurrences === 0 &&
-          page.rows.length === 0;
-        this.active = null;
-        if (previous) {
-          const byAnchor = this.rows.findIndex(
-            (row) => row.anchor.id === previous.row.anchor.id
-          );
-          if (byAnchor !== -1) {
-            const max = Math.max(this.stepCount(this.rows[byAnchor]!) - 1, 0);
-            this.active = {
-              row: byAnchor,
-              occurrence: Math.min(previous.occurrence, max),
-            };
-            this.publish();
-            return;
-          }
-          const nearest = this.nearestByIndex(previous.row.index);
-          if (nearest !== null) {
-            this.activateRow(nearest, "forward");
-            return;
-          }
-        }
-        // Steps taken meanwhile enter the page from its edge (see `drain`), so
-        // Enter during the survey lands on 1 of M, not 2.
-        if (this.pending !== 0) {
-          this.publish();
-          return;
-        }
-        const first = this.nextRow(-1, "forward");
-        if (first === null) this.publish();
-        else this.activateRow(first, "forward");
+          this.complete &&
+          (this.serverTotal?.occurrences ?? 0) === 0 &&
+          this.rows.length === 0;
+        this.placeAfterSurvey(previous);
       }
     );
+  }
+
+  private stopCount(): void {
+    this.countAbort?.abort();
+    this.countAbort = null;
+  }
+
+  /** Pages after the window, added to M only. Does not hold the window lock,
+   *  so Enter inside the window still steps. */
+  private continueCount(cursor: FindCursor): void {
+    const surface = this.surface;
+    if (!surface || !this.term) return;
+    this.stopCount();
+    const ac = new AbortController();
+    this.countAbort = ac;
+    surface.source
+      .find(
+        { text: this.term },
+        { direction: "forward", cursor, limit: FIND_SURVEY_LIMIT },
+        ac.signal
+      )
+      .then(
+        (page) => {
+          if (this.countAbort !== ac) return;
+          this.addPageTotal(page);
+          if (page.total.relation === "eq") {
+            this.complete = page.complete;
+          }
+          this.noResults =
+            this.complete &&
+            (this.serverTotal?.occurrences ?? 0) === 0 &&
+            this.rows.length === 0;
+          if (page.rows.length > 0) {
+            this.countThrough = page.rows[page.rows.length - 1]!.anchor;
+          }
+          this.publish();
+          if (page.total.relation === "gte" && page.rows.length > 0) {
+            this.continueCount({
+              anchor: page.rows[page.rows.length - 1]!.anchor,
+            });
+          } else {
+            this.countAbort = null;
+          }
+        },
+        () => {
+          if (this.countAbort !== ac) return;
+          this.countAbort = null;
+        }
+      )
+      .catch((error: unknown) => console.error(error));
+  }
+
+  private resumeCount(): void {
+    if (
+      this.countAbort ||
+      this.serverTotal?.relation !== "gte" ||
+      !this.countThrough
+    ) {
+      return;
+    }
+    this.continueCount({ anchor: this.countThrough });
+  }
+
+  private addPageTotal(page: FindPage): void {
+    this.addRowsToTotal(page.rows, page.total.relation);
+  }
+
+  /** Sum rows this page introduces. Skip ids already in `countedIds` so an
+   *  extend behind the count frontier is not added twice. */
+  private addRowsToTotal(
+    rows: FindRow[],
+    relation: FindTotal["relation"]
+  ): void {
+    const extra = rows.filter((row) => !this.countedIds.has(row.anchor.id));
+    for (const row of extra) this.countedIds.add(row.anchor.id);
+    if (extra.length === 0) {
+      if (relation === "eq" && this.serverTotal) {
+        this.serverTotal = { ...this.serverTotal, relation };
+      }
+      return;
+    }
+    const prev = this.serverTotal;
+    this.serverTotal = {
+      rows: (prev?.rows ?? 0) + extra.length,
+      occurrences:
+        (prev?.occurrences ?? 0) +
+        extra.reduce((sum, row) => sum + row.count, 0),
+      relation: extra.length === rows.length ? relation : "gte",
+    };
+  }
+
+  private placeAfterSurvey(
+    previous: { row: FindRow; occurrence: number } | null
+  ): void {
+    this.active = null;
+    if (previous) {
+      const byAnchor = this.rows.findIndex(
+        (row) => row.anchor.id === previous.row.anchor.id
+      );
+      if (byAnchor !== -1) {
+        const max = Math.max(this.stepCount(this.rows[byAnchor]!) - 1, 0);
+        this.active = {
+          row: byAnchor,
+          occurrence: Math.min(previous.occurrence, max),
+        };
+        this.publish();
+        return;
+      }
+      const nearest = this.nearestByIndex(previous.row.index);
+      if (nearest !== null) {
+        this.activateRow(nearest, "forward");
+        return;
+      }
+    }
+    if (this.pending !== 0) {
+      this.publish();
+      return;
+    }
+    const first = this.nextRow(-1, "forward");
+    if (first === null) this.publish();
+    else this.activateRow(first, "forward");
   }
 
   /** Where a re-survey starts so its page holds the active row: the top
@@ -455,26 +561,6 @@ export class FindStore implements FindCoordinator {
     this.surface.reveal(target, this.revealAbort.signal);
   }
 
-  /**
-   * Whether the window now reaches the far universe edge. Only a page that
-   * saw the whole universe (`complete`) can prove one: with the window
-   * anchored at the opposite edge and an exact total, the row total is
-   * authoritative; otherwise a part-filled page proves the scan ran out (a
-   * full page proves nothing, since sources may cap pages below `limit`).
-   */
-  private coversEdge(
-    page: FindPage,
-    windowLength: number,
-    anchoredAtOppositeEdge: boolean,
-    limit = FIND_SURVEY_LIMIT
-  ): boolean {
-    if (!page.complete) return false;
-    if (anchoredAtOppositeEdge && page.total.relation === "eq") {
-      return windowLength >= page.total.rows;
-    }
-    return page.rows.length < limit;
-  }
-
   private extend(direction: FindDirection): void {
     const edge =
       direction === "forward" ? this.rows[this.rows.length - 1] : this.rows[0];
@@ -485,26 +571,22 @@ export class FindStore implements FindCoordinator {
         if (page.rows.length === 0) {
           if (direction === "forward") this.windowAtEnd = true;
           else this.windowAtStart = true;
+          if (direction === "forward" && page.total.relation === "eq") {
+            this.complete = page.complete;
+          }
         } else if (direction === "forward") {
           this.rows = [...this.rows, ...page.rows];
-          this.windowAtEnd = this.coversEdge(
-            page,
-            this.rows.length,
-            this.windowAtStart,
-            FIND_STEP_LIMIT
-          );
+          this.addRowsToTotal(page.rows, page.total.relation);
+          this.windowAtEnd = page.total.relation === "eq";
+          if (page.total.relation === "eq") this.complete = page.complete;
         } else {
-          // Backward pages arrive nearest-first.
+          // Backward pages arrive nearest-first. Those rows are earlier in
+          // scan order; M already has them or the forward count will.
           const reversed = [...page.rows].reverse();
           this.rows = [...reversed, ...this.rows];
-          this.windowBefore = null;
+          if (page.total.relation === "eq") this.windowBefore = null;
           if (this.active) this.active.row += reversed.length;
-          this.windowAtStart = this.coversEdge(
-            page,
-            this.rows.length,
-            this.windowAtEnd,
-            FIND_STEP_LIMIT
-          );
+          this.windowAtStart = page.total.relation === "eq";
         }
         this.publish();
       }
@@ -519,20 +601,17 @@ export class FindStore implements FindCoordinator {
     const direction: FindDirection = edge === "start" ? "forward" : "backward";
     this.fetch({ direction, limit: FIND_STEP_LIMIT }, (page) => {
       if (this.pending === 0) return;
-      const coversAll = this.coversEdge(
-        page,
-        page.rows.length,
-        true,
-        FIND_STEP_LIMIT
-      );
+      if (edge === "start" && page.total.relation === "eq") {
+        this.complete = page.complete;
+      }
       if (edge === "start") {
         this.rows = page.rows;
         this.windowAtStart = true;
-        this.windowAtEnd = coversAll;
+        this.windowAtEnd = page.total.relation === "eq";
       } else {
         this.rows = [...page.rows].reverse();
         this.windowAtEnd = true;
-        this.windowAtStart = coversAll;
+        this.windowAtStart = page.total.relation === "eq";
       }
       this.windowBefore = null;
       this.active = null;

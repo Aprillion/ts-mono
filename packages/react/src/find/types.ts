@@ -27,7 +27,7 @@ export interface FindQuery {
 export interface FindTotal {
   rows: number;
   occurrences: number;
-  /** "gte" renders as "M+" (so does an incomplete page). */
+  /** "gte" until a page walks off the sealed source; the band shows M+. */
   relation: "eq" | "gte";
 }
 
@@ -35,8 +35,8 @@ export interface FindPage {
   /** Rows in the direction of travel: a backward page is nearest-first. */
   rows: FindRow[];
   total: FindTotal;
-  /** False when the universe wasn't fully seen (data still loading, cap
-   *  hit): the total is not final. */
+  /** False when the sample is still being written. A short page (limit or
+   *  time budget) is `relation: "gte"`, not `complete: false`. */
   complete: boolean;
 }
 
@@ -91,8 +91,8 @@ export interface FindState {
    *  (window anchored at neither universe edge, or at the end of an inexact
    *  universe) and while the active row renders no match. */
   activeOrdinal: number | null;
-  /** The source's universe-wide total (the "M"), never rewritten from the
-   *  DOM; null before the first survey ends. */
+  /** Proven match counts so far (the "M"); `relation: "gte"` until pagination
+   *  walks off the source. Never rewritten from the DOM. */
   total: FindTotal | null;
   /** The last page saw the whole universe (false renders the total as "M+"). */
   complete: boolean;

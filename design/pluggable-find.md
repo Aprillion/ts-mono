@@ -37,9 +37,11 @@ response { rows: { anchor, index, count, texts }[],
 - Rows come **in the direction of travel**, strictly past the cursor anchor:
   a backward page is nearest-first. `limit` is a row cap, 1–1000; the view
   server rejects anything else (422) and the client never exceeds it.
-- `total.occurrences` is the "M". `relation: "gte"` or `complete: false`
-  renders it as "M+"; `complete: false` is what a live sample served from the
-  buffer returns.
+- Each page's `total` is **that page** (row/occurrence counts of the
+  response). `relation: "gte"` until a request walks off a **sealed** source;
+  the client sums pages and the band shows M+ until then. `complete: false`
+  is a live sample (also M+). A page stops at `limit` or ~50ms after the
+  first match so the first hits paint while the rest of the scan continues.
 
 **Anchor rule** (`messageRowAnchorIds`, mirrored by the server): a row's
 anchor is its head message id verbatim — the fold mints `msg-{index}` for a
@@ -57,11 +59,13 @@ Coordinator (`@tsmono/react/find`: `FindStore`, `FindProvider`,
 registers when its host passes `findMessages` (inspect's `SampleDisplay`
 adapts `api.find_messages` in `messagesFind.ts`); scout's chat lists don't.
 
-**Window.** A term change issues one survey (forward, 1000 rows — the view
-server's page maximum). Stepping inside the window is local; stepping past
-an edge issues a cursor page (200 rows); past a proven universe edge it
-re-windows from the opposite end. The page sizes are guesses bounded by the
-server's cap.
+**Window.** A term change surveys forward (1000 rows — the view server's
+  page maximum) and keeps that page as the window. While `total.relation` is
+  `gte`, further pages accumulate M only (they do not grow the window to the
+  whole hit set). Stepping inside the window is local; stepping past an edge
+  issues a cursor page (200 rows); past a proven universe edge it re-windows
+  from the opposite end. The page sizes are guesses bounded by the server's
+  cap.
 
 **One fetch at a time.** Steps taken while a page is in flight accumulate as
 a signed count (Enter +1, Shift+Enter -1) and apply when the page commits, so

@@ -72,15 +72,34 @@ const TestSurface: FC<{
     const source: FindSource = {
       find: async (query, opts) => {
         const all = matchesFor(query.text);
-        const page = all.slice(0, opts.limit);
+        const backward = opts.direction === "backward";
+        let i: number;
+        if (opts.cursor) {
+          const at = all.findIndex(
+            (r) => r.anchor.id === opts.cursor!.anchor.id
+          );
+          i = backward ? at - 1 : at + 1;
+        } else {
+          i = backward ? all.length - 1 : 0;
+        }
+        const page: FindRow[] = [];
+        const step = backward ? -1 : 1;
+        for (
+          ;
+          i >= 0 && i < all.length && page.length < opts.limit;
+          i += step
+        ) {
+          page.push(all[i]!);
+        }
         if (gate) await gate;
+        const more = i >= 0 && i < all.length;
         return {
           rows: page,
           complete: !capped,
           total: {
-            rows: all.length,
-            occurrences: all.reduce((sum, row) => sum + row.count, 0),
-            relation: "eq",
+            rows: page.length,
+            occurrences: page.reduce((sum, row) => sum + row.count, 0),
+            relation: more || capped ? "gte" : "eq",
           },
         };
       },
