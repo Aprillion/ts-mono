@@ -15,7 +15,7 @@ import type { ChatMessage } from "@tsmono/inspect-common/types";
 import { NoContentsPanel } from "@tsmono/react/components";
 import { useFindHighlights, useFindSurface } from "@tsmono/react/find";
 import type { FindRow, FindSource } from "@tsmono/react/find";
-import { useListKeyboardNavigation } from "@tsmono/react/hooks";
+import { useListKeyboardNavigation, usePendingFindReveal } from "@tsmono/react/hooks";
 import { VirtualList } from "@tsmono/react/virtual";
 import type {
   VirtualListHandle,
@@ -250,15 +250,12 @@ export const ChatViewRowsVirtualList: FC<ChatViewRowsVirtualListProps> = memo(
       pendingReveal.current = { row, signal };
       if (hasMoreRows) onLoadMoreRows?.();
     };
-    useEffect(() => {
-      const pending = pendingReveal.current;
-      if (!pending) return;
-      if (pending.signal.aborted || revealLoaded(pending.row)) {
-        pendingReveal.current = null;
-      } else if (hasMoreRows) {
-        onLoadMoreRows?.();
-      }
-    }, [revealLoaded, hasMoreRows, onLoadMoreRows]);
+    usePendingFindReveal(
+      pendingReveal,
+      revealLoaded,
+      hasMoreRows,
+      onLoadMoreRows
+    );
     useFindSurface(
       findSource !== null
         ? { scopeId: MESSAGES_FIND_SCOPE, source: findSource, reveal }

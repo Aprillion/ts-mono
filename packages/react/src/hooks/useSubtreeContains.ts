@@ -19,7 +19,7 @@ export function useSubtreeContains(
         setContains(false);
         return;
       }
-      const text = root.textContent ?? "";
+      const text = root.textContent || "";
       setContains(
         needles.length > 0
           ? needles.some((needle) => text.includes(needle))

@@ -107,8 +107,20 @@ export class FindStore implements FindCoordinator {
     };
     // React cleanup+setup pairs re-register the same surface; publishing an
     // unchanged snapshot would re-render every consumer for nothing.
-    const keys = Object.keys(next) as (keyof FindState)[];
-    if (keys.every((k) => Object.is(this.state[k], next[k]))) return;
+    if (
+      this.state.term === next.term &&
+      this.state.rows === next.rows &&
+      this.state.variants === next.variants &&
+      this.state.activeRow === next.activeRow &&
+      this.state.activeOccurrence === next.activeOccurrence &&
+      this.state.activeOrdinal === next.activeOrdinal &&
+      this.state.total === next.total &&
+      this.state.complete === next.complete &&
+      this.state.noResults === next.noResults &&
+      this.state.scopeId === next.scopeId
+    ) {
+      return;
+    }
     this.state = next;
     for (const l of this.listeners) l();
   }
@@ -257,6 +269,10 @@ export class FindStore implements FindCoordinator {
     this.listeners.clear();
   }
 
+  private fetchIdle(): boolean {
+    return this.inflight === null;
+  }
+
   private abortAll(): void {
     this.inflight?.abort();
     this.inflight = null;
@@ -306,7 +322,9 @@ export class FindStore implements FindCoordinator {
           this.inflight = null;
           onPage(page);
           this.drain();
-          if (!this.inflight) this.resumeCount();
+          // drain() may have started another fetch; a method read so TS
+          // does not keep the `null` narrowing from the assignment above.
+          if (this.fetchIdle()) this.resumeCount();
         },
         () => {
           if (this.inflight !== ac) return;
@@ -348,7 +366,7 @@ export class FindStore implements FindCoordinator {
         this.windowAtEnd = page.total.relation === "eq";
         this.noResults =
           this.complete &&
-          (this.serverTotal?.occurrences ?? 0) === 0 &&
+          this.serverTotal.occurrences === 0 &&
           this.rows.length === 0;
         this.placeAfterSurvey(
           previous,
@@ -443,7 +461,9 @@ export class FindStore implements FindCoordinator {
       occurrences:
         (prev?.occurrences ?? 0) +
         extra.reduce((sum, row) => sum + row.count, 0),
-      relation: extra.length === rows.length ? relation : "gte",
+      // Overlap with already-counted ids must not turn a sealed (eq) page
+      // back into M+.
+      relation: relation === "eq" ? "eq" : extra.length === rows.length ? relation : "gte",
     };
   }
 

@@ -3,7 +3,7 @@ export {
   FindProvider,
   useFindCoordinatorOptional,
   useFindState,
-  useFindSurface,
 } from "./FindCoordinatorContext";
+export { useFindSurface } from "../hooks/useFindSurface";
 export { findScrollableParent, scrollRangeToCenter } from "./rangeScroll";
 export { useFindHighlights } from "./useFindHighlights";

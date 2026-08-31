@@ -33,3 +33,4 @@ export * from "./useOnClickOutside";
 export * from "./useTimeout";
 export * from "./useUnmount";
 export * from "./useSubtreeContains";
+export * from "./usePendingFindReveal";

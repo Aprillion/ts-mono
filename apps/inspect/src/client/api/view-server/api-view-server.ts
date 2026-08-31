@@ -641,7 +641,7 @@ export function viewServerApi(
       JSON.stringify(request),
       signal
     );
-    return result.parsed as FindMessagesResponse;
+    return asResponse<FindMessagesResponse>(result.parsed);
   };
 
   const download_log = (log_file: string): Promise<void> => {
