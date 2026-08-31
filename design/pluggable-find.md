@@ -108,10 +108,11 @@ measured the band it mounted (a target computed while rows sit at estimated
 sizes is moved by the correction, and clamped short at the list end); a step
 onto a mounted row's occurrence scrolls only when that occurrence is out of
 view. Collapsed panels (`ExpandablePanel`)
-expand when they contain one of the window's `texts`, so a typed `cafe`
-opens a panel holding only `café`; they mount collapsed and decide before
-paint, never expanded-then-collapsed, so the centre target is computed
-against the layout that stays. A closed `<details>` around the active
+expand when the active occurrence sits below the fold (`data-find-anchor`
+plus `rangeExceedsFold`), not merely because some other window text is in
+the panel; they mount collapsed and decide before paint, never
+expanded-then-collapsed, so the centre target is computed against the
+layout that stays. A closed `<details>` around the active
 occurrence is opened before centring (it lays out nothing while closed).
 Without Custom Highlights the row flashes.
 
