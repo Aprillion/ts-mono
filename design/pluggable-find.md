@@ -65,7 +65,8 @@ adapts `api.find_messages` in `messagesFind.ts`); scout's chat lists don't.
   whole hit set). Stepping inside the window is local; stepping past an edge
   issues a cursor page (200 rows); past a proven universe edge it re-windows
   from the opposite end. The page sizes are guesses bounded by the server's
-  cap.
+  cap. A wrap's page is folded into M (or replaces M when that page is
+  `eq`); a 1-row survey must not stay as "N of 1" against a suffix window.
 
 **One fetch at a time.** Steps taken while a page is in flight accumulate as
 a signed count (Enter +1, Shift+Enter -1) and apply when the page commits, so

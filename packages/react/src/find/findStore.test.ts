@@ -399,6 +399,56 @@ describe("FindStore", () => {
     expect(pos(store)).toEqual([0, 0, 0, 12]);
   });
 
+  it("Shift+Enter wrap does not report a negative N when a 1-row survey later claims eq", async () => {
+    // Survey paints one hit (50ms budget analogue) then a follow-up page
+    // walks off EOF, while a backward wrap still returns later rows — the
+    // band used to show "-2 of 1".
+    const all = Array.from({ length: 5 }, (_, i) => row(`m${i}`, 1, i));
+    const store = new FindStore();
+    const source: FindSource = {
+      async find(_query: FindQuery, opts: FindOptions): Promise<FindPage> {
+        if (opts.direction === "forward" && !opts.cursor) {
+          return {
+            rows: [all[0]!],
+            complete: true,
+            total: { rows: 1, occurrences: 1, relation: "gte" },
+          };
+        }
+        if (opts.direction === "forward") {
+          return {
+            rows: [],
+            complete: true,
+            total: { rows: 0, occurrences: 0, relation: "eq" },
+          };
+        }
+        return {
+          rows: [all[4]!, all[3]!, all[2]!, all[1]!],
+          complete: true,
+          total: { rows: 4, occurrences: 4, relation: "gte" },
+        };
+      },
+    };
+    store.registerSurface({
+      scopeId: "messages",
+      source,
+      reveal: vi.fn(),
+    });
+    store.setTerm("x");
+    await flush();
+    expect(pos(store)).toEqual([0, 0, 0, 1]);
+
+    store.previous();
+    await flush();
+    store.previous();
+    store.previous();
+    store.previous();
+    const st = store.getState();
+    expect(st.activeOccurrence).toBeGreaterThanOrEqual(0);
+    expect(st.activeOrdinal).not.toBeNull();
+    expect(st.activeOrdinal).toBeGreaterThanOrEqual(0);
+    expect(st.total?.occurrences).toBeGreaterThanOrEqual(4);
+  });
+
   it("does not treat a short incomplete survey as the universe end: re-queries with a cursor, then wraps when nothing more comes", async () => {
     const store = new FindStore();
     const { surface, calls } = makeSurface("messages", [row("a"), row("b")], {
@@ -584,6 +634,138 @@ describe("FindStore", () => {
 
     store.next();
     expect(activeId()).toBe("m1100");
+  });
+
+  it("keeps the wrapped last hit when a small live sample grows inside one survey page", async () => {
+    const store = new FindStore();
+    const all = Array.from({ length: 8 }, (_, i) => row(`m${i}`, 1, i));
+    const { surface, reveal } = makeSurface("messages", all, {
+      incomplete: true,
+    });
+    store.registerSurface(surface);
+    store.setTerm("x");
+    await flush();
+    store.previous();
+    await flush();
+    expect(store.getState().rows[pos(store)[0] as number]?.anchor.id).toBe(
+      "m7"
+    );
+    reveal.mockClear();
+    all.push(row("m8", 1, 8));
+    store.invalidate("messages");
+    await flush();
+    expect(store.getState().rows[pos(store)[0] as number]?.anchor.id).toBe(
+      "m7"
+    );
+    expect(pos(store)[2]).toBe(7);
+    expect(reveal).not.toHaveBeenCalled();
+  });
+
+  it("stays on the last hit through wrap when a live sample reseals under new ids", async () => {
+    const store = new FindStore();
+    const all = Array.from({ length: 8 }, (_, i) => row(`m${i}`, 1, i));
+    const { surface } = makeSurface("messages", all, { incomplete: true });
+    store.registerSurface(surface);
+    store.setTerm("x");
+    await flush();
+    store.previous();
+    await flush();
+    all.length = 0;
+    for (let i = 0; i < 9; i++) all.push(row(`n${i}`, 1, i));
+    store.invalidate("messages");
+    await flush();
+    expect(store.getState().rows[pos(store)[0] as number]?.anchor.id).not.toBe(
+      "n0"
+    );
+    expect(store.getState().rows[pos(store)[0] as number]?.anchor.id).toBe(
+      "n8"
+    );
+    expect(pos(store)[2]).not.toBe(0);
+  });
+
+  it("wrap under gte then grow does not report ordinal 0 when wrap rows all had index 0", async () => {
+    const store = new FindStore();
+    const all = Array.from({ length: 8 }, (_, i) => row(`m${i}`, 1, 0));
+    const { surface } = makeSurface("messages", all, { incomplete: true });
+    store.registerSurface(surface);
+    store.setTerm("x");
+    await flush();
+    store.previous();
+    await flush();
+    all.length = 0;
+    for (let i = 0; i < 9; i++) all.push(row(`n${i}`, 1, i));
+    store.invalidate("messages");
+    await flush();
+    expect(pos(store)[2]).not.toBe(0);
+    expect(store.getState().rows[pos(store)[0] as number]?.anchor.id).not.toBe(
+      "n0"
+    );
+  });
+
+  it("keeps an end-wrap pin across surface re-register", async () => {
+    const store = new FindStore();
+    const all = Array.from({ length: 8 }, (_, i) => row(`m${i}`, 1, i));
+    const first = makeSurface("messages", all, { incomplete: true });
+    const unreg = store.registerSurface(first.surface);
+    store.setTerm("x");
+    await flush();
+    store.previous();
+    await flush();
+    expect(store.getState().rows[pos(store)[0] as number]?.anchor.id).toBe(
+      "m7"
+    );
+    all.push(row("m8", 1, 8));
+    unreg();
+    store.registerSurface(
+      makeSurface("messages", all, { incomplete: true }).surface
+    );
+    await flush();
+    expect(store.getState().rows[pos(store)[0] as number]?.anchor.id).toBe(
+      "m8"
+    );
+    expect(pos(store)).toEqual([8, 0, 8, 9]);
+  });
+
+  it("clears the end pin when the user steps forward after wrap", async () => {
+    const store = new FindStore();
+    const all = Array.from({ length: 8 }, (_, i) => row(`m${i}`, 1, i));
+    const { surface } = makeSurface("messages", all, { incomplete: true });
+    store.registerSurface(surface);
+    store.setTerm("x");
+    await flush();
+    store.previous();
+    await flush();
+    store.next();
+    await flush();
+    expect(store.getState().rows[pos(store)[0] as number]?.anchor.id).toBe(
+      "m0"
+    );
+    all.push(row("m8", 1, 8));
+    store.invalidate("messages");
+    await flush();
+    expect(store.getState().rows[pos(store)[0] as number]?.anchor.id).toBe(
+      "m0"
+    );
+  });
+
+  it("does not keep the end pin when a different scope registers", async () => {
+    const store = new FindStore();
+    const all = Array.from({ length: 8 }, (_, i) => row(`m${i}`, 1, i));
+    const unreg = store.registerSurface(
+      makeSurface("messages", all, { incomplete: true }).surface
+    );
+    store.setTerm("x");
+    await flush();
+    store.previous();
+    await flush();
+    unreg();
+    store.registerSurface(
+      makeSurface("other", all, { incomplete: true }).surface
+    );
+    await flush();
+    expect(store.getState().rows[pos(store)[0] as number]?.anchor.id).toBe(
+      "m0"
+    );
   });
 
   it("re-surveys from the top while the active row is inside the first page, so N stays known", async () => {
