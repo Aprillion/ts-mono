@@ -562,8 +562,8 @@
   },
   "apps/inspect/src/log_data/fetchEngine.ts": {
     "@typescript-eslint/no-floating-promises": {
-      "count": 3,
-      "undescribed": 3
+      "count": 2,
+      "undescribed": 1
     }
   },
   "apps/inspect/src/log_data/FetchEngineController.tsx": {
@@ -764,10 +764,6 @@
     }
   },
   "apps/scout/src/api/api-scout-server.ts": {
-    "@typescript-eslint/no-floating-promises": {
-      "count": 1,
-      "undescribed": 1
-    },
     "@typescript-eslint/no-unnecessary-condition": {
       "count": 1,
       "undescribed": 1
@@ -790,12 +786,6 @@
     },
     "tsmono/no-raw-use-effect": {
       "count": 2
-    }
-  },
-  "apps/scout/src/app/components/ActivityBarLayout.tsx": {
-    "@typescript-eslint/no-floating-promises": {
-      "count": 1,
-      "undescribed": 1
     }
   },
   "apps/scout/src/app/components/AddFilterButton.tsx": {
@@ -827,10 +817,6 @@
     }
   },
   "apps/scout/src/app/components/dataGrid/DataGrid.tsx": {
-    "@typescript-eslint/no-floating-promises": {
-      "count": 2,
-      "undescribed": 2
-    },
     "@typescript-eslint/no-unnecessary-condition": {
       "count": 1,
       "undescribed": 1
@@ -876,12 +862,6 @@
     },
     "react-hooks/refs": {
       "count": 1
-    }
-  },
-  "apps/scout/src/app/components/ProjectBar.tsx": {
-    "@typescript-eslint/no-floating-promises": {
-      "count": 1,
-      "undescribed": 1
     }
   },
   "apps/scout/src/app/components/TranscriptsNavbar.tsx": {
@@ -942,10 +922,6 @@
     }
   },
   "apps/scout/src/app/hooks/useWindowMessaging.ts": {
-    "@typescript-eslint/no-floating-promises": {
-      "count": 2,
-      "undescribed": 2
-    },
     "@typescript-eslint/no-unnecessary-condition": {
       "count": 1,
       "undescribed": 1
@@ -1041,10 +1017,6 @@
     }
   },
   "apps/scout/src/app/scan/scanners/list/ScannerResultsList.tsx": {
-    "@typescript-eslint/no-floating-promises": {
-      "count": 1,
-      "undescribed": 1
-    },
     "@typescript-eslint/no-unnecessary-condition": {
       "count": 1,
       "undescribed": 1
@@ -1054,17 +1026,7 @@
     }
   },
   "apps/scout/src/app/scan/scanners/list/ScannerResultsRow.tsx": {
-    "@typescript-eslint/no-floating-promises": {
-      "count": 2,
-      "undescribed": 2
-    },
     "@typescript-eslint/no-unnecessary-condition": {
-      "count": 1,
-      "undescribed": 1
-    }
-  },
-  "apps/scout/src/app/scan/scanners/results/ScannerResultsBody.tsx": {
-    "@typescript-eslint/no-floating-promises": {
       "count": 1,
       "undescribed": 1
     }
@@ -1290,10 +1252,6 @@
     }
   },
   "apps/scout/src/AppRouter.tsx": {
-    "@typescript-eslint/no-floating-promises": {
-      "count": 2,
-      "undescribed": 2
-    },
     "tsmono/no-raw-use-effect": {
       "count": 1
     }
