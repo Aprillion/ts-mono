@@ -217,6 +217,54 @@ describe("FindBand", () => {
       );
     });
 
+    it("waits 500ms to search one letter and 300ms from the second", async () => {
+      vi.useFakeTimers();
+      try {
+        const input = renderWithSurface(
+          <>
+            <TestSurface matchesFor={needleMatches(1)} />
+            <TermProbe />
+          </>
+        );
+        const term = () => screen.getByTestId("coordinator-term").textContent;
+
+        fireEvent.change(input, { target: { value: "n" } });
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(499);
+        });
+        expect(term()).toBe("");
+
+        fireEvent.change(input, { target: { value: "ne" } });
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(1);
+        });
+        expect(term()).toBe("");
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(299);
+        });
+        expect(term()).toBe("ne");
+
+        fireEvent.change(input, { target: { value: "n" } });
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(500);
+        });
+        expect(term()).toBe("n");
+
+        fireEvent.change(input, { target: { value: "" } });
+        expect(term()).toBe("");
+
+        fireEvent.change(input, { target: { value: "n" } });
+        fireEvent.keyDown(input, { key: "Enter" });
+        expect(term()).toBe("n");
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(500);
+        });
+        expect(term()).toBe("n");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it("steps with Enter and wraps around", async () => {
       const input = renderWithSurface(
         <TestSurface matchesFor={needleMatches(2)} />

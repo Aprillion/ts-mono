@@ -68,6 +68,15 @@ adapts `api.find_messages` in `messagesFind.ts`); scout's chat lists don't.
   cap. A wrap's page is folded into M (or replaces M when that page is
   `eq`); a 1-row survey must not stay as "N of 1" against a suffix window.
 
+**Sealed-page LRU.** Inspect's `messagesFindSource` caches sealed POST
+  pages (128, a guess) keyed by log, sample, term, cursor, direction, limit,
+  and projection. Backspace to a term whose pages already finished does not
+  POST again. Live samples (`complete: false`) are not stored. A term never
+  paused on is still a miss — the cache does not derive `"use"` from `"user"`.
+  Typing waits 500ms on a lone first letter and 300ms from the second, so a
+  query still being typed does not survey each prefix; Enter searches now.
+  A live (`complete: false`) page drops that sample's sealed cache entries.
+
 **One fetch at a time.** Steps taken while a page is in flight accumulate as
 a signed count (Enter +1, Shift+Enter -1) and apply when the page commits, so
 mashed Enter past a wrap lands on 1, 2, 3, … and Enter during the survey lands
@@ -136,8 +145,9 @@ scrolled to.
 
 - **`window.find` / DOM search** — virtualized rows aren't in the DOM; the
   retry/poll machinery it needed was the bug.
-- **A client-side in-memory source** — samples that never fit in memory; and
-  a second projection to keep in sync with the server's.
+- **GET so the browser cache stores pages** — live samples must not cache,
+  hawk auth is part of the key, and cursor+projection are an awkward query
+  string. Sealed pages are reused in the inspect adapter's LRU instead.
 - **Occurrences or offsets on the wire** — they pin the server to the DOM's
   text; rows + literal variants let the DOM decide.
 - **Any fold in JS** — `RegExp` `u`+`i` is simple case folding only

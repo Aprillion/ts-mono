@@ -16,7 +16,6 @@ import {
   useFindState,
   type FindState,
 } from "../find";
-import { useDebouncedCallback } from "../hooks/useDebouncedCallback";
 
 import { useExtendedFind } from "./ExtendedFindContext";
 import { FindBandUI } from "./FindBandUI";
@@ -31,14 +30,19 @@ const findConfig = {
   showDialog: false,
 };
 
+// Longer wait on a lone first letter so typing "user" does not POST a
+// 1-char survey. 2+ uses `debounceMs` (inspect default 300; scout already
+// passed 300).
+const FIRST_LETTER_DEBOUNCE_MS = 500;
+
 interface FindBandProps {
   onClose: () => void;
-  // Type-ahead debounce. Defaults preserve each app's pre-unification value
-  // (inspect 100ms; scout passes 300ms).
+  // Type-ahead debounce for 2+ characters. Defaults preserve scout's 300ms;
+  // inspect used 100ms and now shares 300.
   debounceMs?: number;
 }
 
-export const FindBand: FC<FindBandProps> = ({ onClose, debounceMs = 100 }) => {
+export const FindBand: FC<FindBandProps> = ({ onClose, debounceMs = 300 }) => {
   const searchBoxRef = useRef<HTMLInputElement>(null);
   const { extendedFindTerm, countAllMatches, getMatchCountersVersion } =
     useExtendedFind();
@@ -59,6 +63,7 @@ export const FindBand: FC<FindBandProps> = ({ onClose, debounceMs = 100 }) => {
   const scrollTimeoutRef = useRef<number | null>(null);
   const focusTimeoutRef = useRef<number | null>(null);
   const searchIdRef = useRef(0);
+  const typingTimerRef = useRef<number | null>(null);
   const cachedCount = useRef<{ term: string; version: number; count: number }>({
     term: "",
     version: -1,
@@ -105,6 +110,10 @@ export const FindBand: FC<FindBandProps> = ({ onClose, debounceMs = 100 }) => {
 
   const handleSearch = useCallback(
     async (back = false, skipKnownMiss = false) => {
+      if (typingTimerRef.current !== null) {
+        window.clearTimeout(typingTimerRef.current);
+        typingTimerRef.current = null;
+      }
       const thisSearchId = ++searchIdRef.current;
 
       const searchTerm = searchBoxRef.current?.value ?? "";
@@ -304,6 +313,9 @@ export const FindBand: FC<FindBandProps> = ({ onClose, debounceMs = 100 }) => {
       if (scrollTimeoutRef.current !== null) {
         window.clearTimeout(scrollTimeoutRef.current);
       }
+      if (typingTimerRef.current !== null) {
+        window.clearTimeout(typingTimerRef.current);
+      }
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
       if (focusTimeout !== null) {
         window.clearTimeout(focusTimeout);
@@ -358,10 +370,22 @@ export const FindBand: FC<FindBandProps> = ({ onClose, debounceMs = 100 }) => {
     if (!hasSurface) needsCursorRestoreRef.current = true;
   }, [handleSearch, hasSurface]);
 
-  const handleInputChange = useDebouncedCallback(
-    runDebouncedSearch,
-    debounceMs
-  );
+  const handleInputChange = useCallback(() => {
+    if (typingTimerRef.current !== null) {
+      window.clearTimeout(typingTimerRef.current);
+      typingTimerRef.current = null;
+    }
+    const len = searchBoxRef.current?.value.length ?? 0;
+    if (len === 0) {
+      runDebouncedSearch().catch((error: unknown) => console.error(error));
+      return;
+    }
+    const delay = len === 1 ? FIRST_LETTER_DEBOUNCE_MS : debounceMs;
+    typingTimerRef.current = window.setTimeout(() => {
+      typingTimerRef.current = null;
+      runDebouncedSearch().catch((error: unknown) => console.error(error));
+    }, delay);
+  }, [debounceMs, runDebouncedSearch]);
 
   const restoreCursorIfNeeded = useCallback(() => {
     const input = searchBoxRef.current;
