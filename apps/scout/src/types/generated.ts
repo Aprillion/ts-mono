@@ -806,7 +806,7 @@ export interface components {
             transcripts?: components["schemas"]["AppDir"] | null;
             /** Validation */
             validation?: {
-                [key: string]: string | components["schemas"]["ValidationSet-Output"];
+                [key: string]: string | components["schemas"]["ValidationSet"];
             } | null;
             /** Worklist */
             worklist?: components["schemas"]["Worklist"][] | null;
@@ -2558,7 +2558,7 @@ export interface components {
             transcripts?: string | null;
             /** Validation */
             validation?: {
-                [key: string]: string | components["schemas"]["ValidationSet-Input"];
+                [key: string]: string | components["schemas"]["ValidationSet"];
             } | null;
             /** Worklist */
             worklist?: components["schemas"]["Worklist"][] | null;
@@ -2618,7 +2618,7 @@ export interface components {
             transcripts?: string | null;
             /** Validation */
             validation?: {
-                [key: string]: string | components["schemas"]["ValidationSet-Output"];
+                [key: string]: string | components["schemas"]["ValidationSet"];
             } | null;
             /** Worklist */
             worklist?: components["schemas"]["Worklist"][] | null;
@@ -2661,6 +2661,31 @@ export interface components {
              * @enum {string}
              */
             type: "message" | "event";
+        };
+        /**
+         * RegisteredPredicateSpec
+         * @description Portable reference to a custom predicate registered with `@validation_predicate`.
+         *
+         *     Only the registered name and creation arguments are stored; the predicate
+         *     is recreated from the registry when the scan is resumed.
+         */
+        RegisteredPredicateSpec: {
+            /** Args */
+            args: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /** File */
+            file?: string | null;
+            /**
+             * Kind
+             * @default registered
+             * @constant
+             */
+            kind: "registered";
+            /** Name */
+            name: string;
+            /** Package Version */
+            package_version?: string | null;
         };
         /**
          * RenameValidationSetRequest
@@ -2948,7 +2973,7 @@ export interface components {
             transcripts?: string | null;
             /** Validation */
             validation?: {
-                [key: string]: string | components["schemas"]["ValidationSet-Input"];
+                [key: string]: string | components["schemas"]["ValidationSet"];
             } | null;
             /** Worklist */
             worklist?: components["schemas"]["Worklist"][] | null;
@@ -3154,7 +3179,7 @@ export interface components {
             transcripts?: components["schemas"]["ScanTranscripts"] | null;
             /** Validation */
             validation?: {
-                [key: string]: components["schemas"]["ValidationSet-Output"];
+                [key: string]: components["schemas"]["ValidationSetSpec"];
             } | null;
             /** Worklist */
             worklist?: components["schemas"]["Worklist"][] | null;
@@ -4207,6 +4232,29 @@ export interface components {
             every: number;
         };
         /**
+         * UnavailablePredicateSpec
+         * @description Inert marker for a custom predicate that cannot be recreated from the scan artifact.
+         *
+         *     Written for anonymous callables (not registered with `@validation_predicate`)
+         *     and substituted in memory for legacy serialized predicates. Resuming a scan
+         *     with an unavailable predicate requires `predicate_overrides`.
+         */
+        UnavailablePredicateSpec: {
+            /** Display Name */
+            display_name?: string | null;
+            /**
+             * Kind
+             * @default unavailable
+             * @constant
+             */
+            kind: "unavailable";
+            /**
+             * Reason
+             * @enum {string}
+             */
+            reason: "anonymous" | "legacy";
+        };
+        /**
          * UrlCitation
          * @description A citation that refers to a URL.
          */
@@ -4370,7 +4418,7 @@ export interface components {
          * ValidationSet
          * @description Validation set for a scanner.
          */
-        "ValidationSet-Input": {
+        ValidationSet: {
             /** Cases */
             cases: components["schemas"]["ValidationCase"][];
             /**
@@ -4382,14 +4430,21 @@ export interface components {
             split?: string | string[] | null;
         };
         /**
-         * ValidationSet
-         * @description Validation set for a scanner.
+         * ValidationSetSpec
+         * @description Data-only validation set stored in portable scan specifications (`_scan.json`).
+         *
+         *     Unlike `ValidationSet`, the predicate is never a callable: it is a built-in
+         *     predicate name, a `RegisteredPredicateSpec`, or an `UnavailablePredicateSpec`.
+         *     Parsing a spec never imports or executes predicate code.
          */
-        "ValidationSet-Output": {
+        ValidationSetSpec: {
             /** Cases */
             cases: components["schemas"]["ValidationCase"][];
-            /** Predicate */
-            predicate?: string | null;
+            /**
+             * Predicate
+             * @default eq
+             */
+            predicate?: ("gt" | "gte" | "lt" | "lte" | "eq" | "ne" | "contains" | "startswith" | "endswith" | "icontains" | "iequals") | components["schemas"]["RegisteredPredicateSpec"] | components["schemas"]["UnavailablePredicateSpec"] | null;
             /** Split */
             split?: string | string[] | null;
         };
