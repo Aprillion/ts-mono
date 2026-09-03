@@ -26,9 +26,12 @@ import type {
   EvalScore,
   EvalSpec,
   EvalStats,
+  Event,
   InfoEvent,
   InputEvent,
+  InterruptEvent,
   LoggerEvent,
+  ModelConfig,
   ModelEvent,
   ModelOutput,
   ModelUsage,
@@ -36,11 +39,14 @@ import type {
   SampleLimitEvent,
   SandboxEvent,
   Score,
+  ScoreEdit,
+  ScoreEditEvent,
   ScoreEvent,
   SpanBeginEvent,
   SpanEndEvent,
   StateEvent,
   StepEvent,
+  StoreEvent,
   SubtaskEvent,
   Timeline,
   TimelineEvent,
@@ -191,6 +197,16 @@ export const testStateEvent = (
   ...overrides,
 });
 
+export const testStoreEvent = (
+  overrides: Partial<StoreEvent> = {}
+): StoreEvent => ({
+  event: "store",
+  timestamp: TEST_TIMESTAMP,
+  working_start: 0,
+  changes: [],
+  ...overrides,
+});
+
 export const testInfoEvent = (
   overrides: Partial<InfoEvent> = {}
 ): InfoEvent => ({
@@ -235,6 +251,36 @@ export const testScoreEvent = (
   working_start: 0,
   intermediate: false,
   score: testScore(),
+  ...overrides,
+});
+
+export const testScoreEdit = (
+  overrides: Partial<ScoreEdit> = {}
+): ScoreEdit => ({
+  value: 1,
+  metadata: {},
+  ...overrides,
+});
+
+export const testScoreEditEvent = (
+  overrides: Partial<ScoreEditEvent> = {}
+): ScoreEditEvent => ({
+  event: "score_edit",
+  timestamp: TEST_TIMESTAMP,
+  working_start: 0,
+  score_name: "scorer",
+  edit: testScoreEdit(),
+  ...overrides,
+});
+
+export const testInterruptEvent = (
+  overrides: Partial<InterruptEvent> = {}
+): InterruptEvent => ({
+  event: "interrupt",
+  timestamp: TEST_TIMESTAMP,
+  working_start: 0,
+  source: "user_cancel",
+  interrupted: "between_turns",
   ...overrides,
 });
 
@@ -423,6 +469,15 @@ export const testEvalSample = (
 // Eval log
 // ---------------------------------------------------------------------------
 
+export const testModelConfig = (
+  overrides: Partial<ModelConfig> = {}
+): ModelConfig => ({
+  model: "mockllm/model",
+  config: {},
+  args: {},
+  ...overrides,
+});
+
 export const testEvalSpec = (overrides: Partial<EvalSpec> = {}): EvalSpec => ({
   eval_id: "eval_1",
   run_id: "run_1",
@@ -499,3 +554,32 @@ export const testEvalLog = (overrides: Partial<EvalLog> = {}): EvalLog => ({
   invalidated: false,
   ...overrides,
 });
+
+/**
+ * Narrows one event out of the `Event` union by its discriminant, throwing if
+ * it is something else. Tests reach for `events[0] as ModelEvent` because the
+ * union is 20-odd members wide; this checks the claim instead of asserting it,
+ * and fails with the type it actually got.
+ */
+export const expectEvent = <T extends Event["event"]>(
+  event: unknown,
+  type: T
+): Extract<Event, { event: T }> => {
+  if (!isEventOfType(event, type)) {
+    const actual =
+      typeof event === "object" && event !== null && "event" in event
+        ? String(event.event)
+        : String(event);
+    throw new Error(`expected a "${type}" event, got "${actual}"`);
+  }
+  return event;
+};
+
+const isEventOfType = <T extends Event["event"]>(
+  event: unknown,
+  type: T
+): event is Extract<Event, { event: T }> =>
+  typeof event === "object" &&
+  event !== null &&
+  "event" in event &&
+  event.event === type;

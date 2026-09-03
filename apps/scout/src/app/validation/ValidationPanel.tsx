@@ -5,16 +5,14 @@ import {
   VscodeSingleSelect,
   VscodeTextfield,
 } from "@vscode-elements/react-elements";
-import {
-  ChangeEvent,
-  FC,
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { FC, useCallback, useEffect, useMemo, useState } from "react";
 
-import { Modal, NonIdealState, TextInput } from "@tsmono/react/components";
+import {
+  Modal,
+  NonIdealState,
+  TextInput,
+  type TextInputChange,
+} from "@tsmono/react/components";
 import { useDocumentTitle } from "@tsmono/react/hooks";
 
 import { ApplicationIcons } from "../../icons";
@@ -28,6 +26,7 @@ import {
   useValidationCases,
   useValidationSets,
 } from "../server/useValidations";
+import { eventValue } from "../utils/formEvents";
 
 import { ValidationCasesList } from "./components/ValidationCasesList";
 import { ValidationSetSelector } from "./components/ValidationSetSelector";
@@ -70,6 +69,7 @@ export const ValidationPanel: FC = () => {
   } = useValidationCases(selectedUri ?? skipToken);
 
   // Auto-select first validation set when loaded
+  // eslint-disable-next-line tsmono/no-raw-use-effect -- baselined at rule introduction; migrate to a named hook or derived state
   useEffect(() => {
     if (!selectedUri && validationSets && validationSets.length > 0) {
       setSelectedUri(validationSets[0]);
@@ -200,7 +200,7 @@ export const ValidationPanel: FC = () => {
   };
 
   const handleNameInput = (e: Event) => {
-    const value = (e.target as HTMLInputElement).value;
+    const value = eventValue(e);
     setNewName(value);
   };
 
@@ -240,11 +240,11 @@ export const ValidationPanel: FC = () => {
 
   // Filter handlers
   const handleSplitFilterChange = (e: Event) => {
-    const value = (e.target as HTMLSelectElement).value;
+    const value = eventValue(e);
     setSplitFilter(value || undefined);
   };
 
-  const handleSearchChange = (e: ChangeEvent<HTMLInputElement>) => {
+  const handleSearchChange = (e: TextInputChange) => {
     setSearchText(e.target.value || undefined);
   };
 

@@ -184,11 +184,9 @@ const getMetadataPropertyValues = (
 ): Set<unknown> => {
   const values = new Set<unknown>();
   for (const sample of samples) {
-    if (sample.metadata) {
-      const value = getNestedProperty(sample.metadata, propertyPath);
-      if (value !== undefined && value !== null) {
-        values.add(value);
-      }
+    const value = getNestedProperty(sample.metadata, propertyPath);
+    if (value !== undefined && value !== null) {
+      values.add(value);
     }
   }
   return values;
@@ -199,7 +197,10 @@ const getNestedProperty = (obj: unknown, path: string): unknown => {
   let current: unknown = obj;
   for (const key of keys) {
     if (current && typeof current === "object" && key in current) {
-      current = (current as Record<string, unknown>)[key];
+      // Arrays step too (`list.length`, `list.0`), so plain record access
+      // is not enough; Reflect.get reads any object member by string key.
+      const member: unknown = Reflect.get(current, key);
+      current = member;
     } else {
       return undefined;
     }
@@ -256,18 +257,16 @@ const getMetadataKeysForPath = (
 ): Set<string> => {
   const keys = new Set<string>();
   for (const sample of samples) {
-    if (sample.metadata) {
-      const parentObj = parentPath
-        ? getNestedProperty(sample.metadata, parentPath)
-        : sample.metadata;
-      if (
-        parentObj &&
-        typeof parentObj === "object" &&
-        !Array.isArray(parentObj)
-      ) {
-        for (const key of Object.keys(parentObj)) {
-          keys.add(key);
-        }
+    const parentObj = parentPath
+      ? getNestedProperty(sample.metadata, parentPath)
+      : sample.metadata;
+    if (
+      parentObj &&
+      typeof parentObj === "object" &&
+      !Array.isArray(parentObj)
+    ) {
+      for (const key of Object.keys(parentObj)) {
+        keys.add(key);
       }
     }
   }
@@ -413,9 +412,7 @@ export function getCompletions(
       // Only include metadata if at least one sample has metadata
       return (
         samples &&
-        samples.some(
-          (sample) => sample.metadata && Object.keys(sample.metadata).length > 0
-        )
+        samples.some((sample) => Object.keys(sample.metadata).length > 0)
       );
     }
     return true;

@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { cleanup, render, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -5,18 +6,13 @@ import {
   ComponentStateHooks,
   ComponentStateProvider,
 } from "@tsmono/react/state";
+import { ResizeObserverStub } from "@tsmono/react/testing";
 
 import { DisplayModeContext } from "../../content/DisplayModeContext";
 
 import { ClientToolCall } from "./ClientToolCall";
 import { ToolCallView } from "./ToolCallView";
 import { ToolOutput } from "./ToolOutput";
-
-class ResizeObserverStub {
-  observe() {}
-  unobserve() {}
-  disconnect() {}
-}
 
 vi.stubGlobal("ResizeObserver", ResizeObserverStub);
 

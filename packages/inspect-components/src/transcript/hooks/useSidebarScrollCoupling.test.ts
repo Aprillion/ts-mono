@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { renderHook } from "@testing-library/react";
 import type { RefObject } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -20,7 +21,7 @@ interface ScrollerOptions {
 
 function makeScroller(options: ScrollerOptions = {}) {
   const el = document.createElement("div");
-  el.getBoundingClientRect = () => ({ top: options.top ?? 0 }) as DOMRect;
+  el.getBoundingClientRect = () => new DOMRect(0, options.top ?? 0, 0, 0);
   Object.defineProperty(el, "scrollHeight", {
     value: options.scrollHeight ?? 1000,
     configurable: true,

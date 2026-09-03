@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { cleanup, fireEvent, render } from "@testing-library/react";
 import { ReactNode } from "react";
 import { afterEach, describe, expect, it } from "vitest";
@@ -7,8 +8,6 @@ import {
   ComponentStateProvider,
   type ComponentStateHooks,
 } from "@tsmono/react/state";
-
-import { defaultContext } from "../MessageContents";
 
 import {
   AnnotatedScreenshot,
@@ -85,7 +84,6 @@ describe("AnnotatedScreenshotOutput", () => {
       <AnnotatedScreenshotOutput
         contents={[TEXT, IMAGE, { ...IMAGE, image: `${PNG}last` }]}
         annotation={CLICK}
-        context={defaultContext()}
       />
     );
     const imgs = Array.from(container.querySelectorAll("img"));
@@ -103,11 +101,7 @@ describe("AnnotatedScreenshotOutput", () => {
 
   it("renders text content alongside the screenshot", () => {
     const { container } = renderWithState(
-      <AnnotatedScreenshotOutput
-        contents={[TEXT, IMAGE]}
-        annotation={CLICK}
-        context={defaultContext()}
-      />
+      <AnnotatedScreenshotOutput contents={[TEXT, IMAGE]} annotation={CLICK} />
     );
     expect(container.textContent).toContain("page text");
     expect(container.querySelector("img")).not.toBeNull();

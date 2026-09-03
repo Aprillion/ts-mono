@@ -7,6 +7,7 @@ import {
   type ExtendedFindFn,
   type FindDirection,
 } from "@tsmono/react/components";
+import { useUnmount } from "@tsmono/react/hooks";
 
 import type { SwimlaneRow } from "../timeline/swimlaneRows";
 import type { TranscriptViewNodesHandle } from "../TranscriptViewNodes";
@@ -98,6 +99,7 @@ export function useTranscriptSearchSource(
   // Read across `await` boundaries to detect "user is already on this row"
   // mid-search; needs to be a ref so a row-switch in flight sees the update.
   const selectedRef = useRef(selected);
+  // eslint-disable-next-line tsmono/no-raw-use-effect -- baselined at rule introduction; migrate to a named hook or derived state
   useEffect(() => {
     selectedRef.current = selected;
   }, [selected]);
@@ -109,13 +111,10 @@ export function useTranscriptSearchSource(
   // Self-correction timers scheduled at the end of searchFn. Tracked so
   // unmount can clear them — otherwise they fire against detached DOM.
   const pendingTimersRef = useRef<Set<number>>(new Set());
-  useEffect(() => {
-    const timers = pendingTimersRef.current;
-    return () => {
-      for (const t of timers) clearTimeout(t);
-      timers.clear();
-    };
-  }, []);
+  useUnmount(() => {
+    for (const t of pendingTimersRef.current) clearTimeout(t);
+    pendingTimersRef.current.clear();
+  });
 
   // Active search term. Set by countFn on every keystroke so the listener
   // below has it on the first selectionchange after a fresh search.
@@ -123,6 +122,7 @@ export function useTranscriptSearchSource(
   // Keep `lastResolvedRef` in sync when window.find advances within a row
   // without going through our searchFn. Otherwise the next cross-row
   // navigation would pickNext from a stale position.
+  // eslint-disable-next-line tsmono/no-raw-use-effect -- baselined at rule introduction; migrate to a named hook or derived state
   useEffect(() => {
     if (typeof document === "undefined") return;
     const onSelectionChange = () => {
@@ -272,6 +272,7 @@ export function useTranscriptSearchSource(
     ]
   );
 
+  // eslint-disable-next-line tsmono/no-raw-use-effect -- baselined at rule introduction; migrate to a named hook or derived state
   useEffect(() => {
     const unCount = registerMatchCounter(id, countFn);
     const unSearch = registerVirtualList(id, searchFn);
@@ -352,8 +353,8 @@ function matchAtSelection(
 
   const eventIds = new Set(matches.map((m) => m.eventId));
   let el: Element | null =
-    range.startContainer.nodeType === Node.ELEMENT_NODE
-      ? (range.startContainer as Element)
+    range.startContainer instanceof Element
+      ? range.startContainer
       : range.startContainer.parentElement;
   while (el && !eventIds.has(el.id)) el = el.parentElement;
   if (!el) return null;
@@ -364,7 +365,8 @@ function matchAtSelection(
   let occurrenceInEvent = 0;
   let node: Node | null;
   while ((node = walker.nextNode())) {
-    const textNode = node as Text;
+    if (!(node instanceof Text)) continue;
+    const textNode = node;
     if (textNode === range.startContainer) {
       const head = textNode.data.slice(0, range.startOffset).toLowerCase();
       let from = 0;
@@ -420,7 +422,8 @@ function positionSelectionAroundTerm(
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   let target: { node: Text; idx: number } | null = null;
   for (let node; (node = walker.nextNode());) {
-    const textNode = node as Text;
+    if (!(node instanceof Text)) continue;
+    const textNode = node;
     const text = textNode.data.toLowerCase();
     let from = 0;
     while ((from = text.indexOf(lowered, from)) !== -1) {

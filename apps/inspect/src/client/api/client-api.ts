@@ -21,6 +21,7 @@ import {
   PendingSampleResponse,
   ProgressCallback,
   SampleDataResponse,
+  SampleSummary,
 } from "./types";
 
 const isEvalFile = (file: string) => {
@@ -149,19 +150,34 @@ export const clientApi = (api: LogViewAPI, debug = false): ClientAPI => {
       }
     } else {
       const logContents = await get_log(log_file);
-      /**
-       * @type {import("./Types.js").SampleSummary[]}
-       */
-      const sampleSummaries = logContents.parsed.samples
+      // Samples in a parsed JSON log are already normalized (#555), so this
+      // projection genuinely satisfies SampleSummary.
+      const sampleSummaries: SampleSummary[] = logContents.parsed.samples
         ? logContents.parsed.samples.map((sample) => {
             return {
               id: sample.id,
               epoch: sample.epoch,
+              uuid: sample.uuid,
               input: sample.input,
               target: sample.target,
               scores: sample.scores,
               metadata: sample.metadata,
               error: sample.error?.message,
+              // The summary's limit is the flattened form of the sample's
+              // limit object (mirrors Python's EvalSample.summary()).
+              limit: sample.limit?.type,
+              limit_reason: sample.limit?.reason,
+              retries: sample.error_retries?.length,
+              // A sample serialized into the log body is settled by
+              // definition.
+              completed: true,
+              model_usage: sample.model_usage,
+              role_usage: sample.role_usage,
+              model_fallbacks: sample.model_fallbacks,
+              started_at: sample.started_at,
+              completed_at: sample.completed_at,
+              total_time: sample.total_time,
+              working_time: sample.working_time,
             };
           })
         : [];
@@ -670,15 +686,18 @@ const applyMiddleware = <T extends AnyFn>(
 ): T => {
   if (middlewares.length === 0) return fn;
 
-  return ((...args: Parameters<T>) => {
-    let result: ReturnType<T> = fn(...args) as ReturnType<T>;
+  /* eslint-disable @typescript-eslint/no-unsafe-type-assertion -- generic-signature boundary: TypeScript resolves `fn(...args)` against T's constraint (AnyFn, returning unknown) rather than T itself, and can't express "a wrapper with the same signature as T" for the return */
+  const wrapped = (...args: Parameters<T>): ReturnType<T> => {
+    let result = fn(...args) as ReturnType<T>;
 
     for (const middleware of middlewares) {
       result = middleware(name, fn, args, result);
     }
 
     return result;
-  }) as T;
+  };
+  return wrapped as T;
+  /* eslint-enable @typescript-eslint/no-unsafe-type-assertion */
 };
 
 const createMiddlewareWrapper = (middlewares: Middleware<AnyFn>[]) => {

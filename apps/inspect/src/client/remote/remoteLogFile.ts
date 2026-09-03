@@ -1,4 +1,7 @@
-import { normalizeEvalSample } from "@tsmono/inspect-common/normalize";
+import {
+  normalizeEvalSample,
+  normalizeSampleSummaries,
+} from "@tsmono/inspect-common/normalize";
 import {
   ConfigUpdate,
   EvalLog,
@@ -377,7 +380,7 @@ export const openRemoteLogFile = async (
             if (!Array.isArray(parsed)) {
               throw new Error(`Expected an array in ${filename}`);
             }
-            perFile[index] = parsed as SampleSummary[];
+            perFile[index] = normalizeSampleSummaries(parsed);
           } catch (error) {
             errors.push(error);
           }
@@ -405,7 +408,7 @@ export const openRemoteLogFile = async (
       // the recorder superseded re-logged samples in its flush buffer can
       // carry both a requeued sample's rows
       return dedupeSummaries(
-        (await readJSONFile("summaries.json")) as SampleSummary[]
+        normalizeSampleSummaries(await readJSONFile("summaries.json"))
       );
     } else {
       return readFallbackSummaries();
@@ -455,7 +458,7 @@ export const openRemoteLogFile = async (
         ),
       ]);
 
-      return {
+      const log = {
         version: evalLogHeader.version ?? 2,
         status: evalLogHeader.status ?? "started",
         invalidated: evalLogHeader.invalidated ?? false,
@@ -467,10 +470,9 @@ export const openRemoteLogFile = async (
         tags: evalLogHeader.tags ?? [],
         metadata: evalLogHeader.metadata ?? {},
         samples,
-        // Boundary lift (#555): stats/plan are only written at end-of-eval,
-        // so an in-progress log genuinely lacks them despite EvalLog
-        // requiring them — EvalHeader models that with optional fields.
-      } as EvalLog;
+      };
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- boundary lift (#555): stats/plan are only written at end-of-eval, so an in-progress log genuinely lacks them despite EvalLog requiring them — EvalHeader models that with optional fields
+      return log as EvalLog;
     },
   };
 };

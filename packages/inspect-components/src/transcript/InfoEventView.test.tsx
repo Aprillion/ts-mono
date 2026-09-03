@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -8,6 +9,7 @@ import {
   ComponentStateHooks,
   ComponentStateProvider,
 } from "@tsmono/react/state";
+import { ResizeObserverStub } from "@tsmono/react/testing";
 
 import { InfoEventView } from "./InfoEventView";
 import { EventNode } from "./types";
@@ -42,12 +44,6 @@ const renderView = (data: JsonValue) =>
       </ComponentNavigationProvider>
     </ComponentStateProvider>
   );
-
-class ResizeObserverStub {
-  observe() {}
-  unobserve() {}
-  disconnect() {}
-}
 
 describe("InfoEventView", () => {
   beforeEach(() => {

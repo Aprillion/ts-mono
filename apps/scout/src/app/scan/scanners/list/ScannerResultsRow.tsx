@@ -134,11 +134,13 @@ const ScannerResultsRowComponent: FC<ScannerResultsRowProps> = ({
       </div>
       {hasValidations && (
         <div className={clsx("text-size-smaller")}>
-          <ValidationResult
-            result={summary.validationResult}
-            target={summary.validationTarget}
-            label={summary.label}
-          />
+          {summary.validationResult !== undefined && (
+            <ValidationResult
+              result={summary.validationResult}
+              target={summary.validationTarget}
+              label={summary.label}
+            />
+          )}
         </div>
       )}
       {hasErrors && (
@@ -156,13 +158,13 @@ const ScannerResultsRowComponent: FC<ScannerResultsRowProps> = ({
 
   const handleClick = (e: React.MouseEvent) => {
     // Don't navigate if clicking an inner link
-    if ((e.target as HTMLElement).closest("a")) {
+    if (e.target instanceof Element && e.target.closest("a")) {
       return;
     }
     if (!scanResultUrl) {
       return;
     }
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
+
     navigate(scanResultUrl);
   };
 
@@ -180,7 +182,6 @@ const ScannerResultsRowComponent: FC<ScannerResultsRowProps> = ({
     e.preventDefault();
     selectRow();
     if (scanResultUrl) {
-      // eslint-disable-next-line @typescript-eslint/no-floating-promises
       navigate(scanResultUrl);
     }
   };

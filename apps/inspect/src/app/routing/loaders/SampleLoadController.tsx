@@ -7,11 +7,9 @@ import { useStore } from "../../../state/store";
 
 // Whole property bags of per-sample scroll/list snapshots, cleared by prefix.
 // VirtualList persists per persistenceKey (the outline's list key, the record
-// trees' prefixed keys); "listPosition" is the legacy Virtuoso bag that old
-// sessions may still carry.
+// trees' prefixed keys).
 const kSampleBagKeys = [
   "scrollPosition",
-  "listPosition",
   kTranscriptOutlineListKey,
   kMetadataGridKeyPrefix,
 ];
@@ -42,6 +40,7 @@ export const SampleLoadController: FC = () => {
     (state) => state.sampleActions.setActiveTimelineIndex
   );
 
+  // eslint-disable-next-line tsmono/no-raw-use-effect -- baselined at rule introduction; migrate to a named hook or derived state
   useEffect(() => {
     if (identity === undefined) {
       return;

@@ -1,3 +1,4 @@
+import { normalizeSampleSummaries } from "@tsmono/inspect-common/normalize";
 import {
   AppConfig,
   EvalLog,
@@ -10,9 +11,10 @@ import {
   SearchRequest,
   SearchResponse,
 } from "@tsmono/inspect-common/types";
+import { modelRoleNames } from "@tsmono/inspect-common/utils";
 import { asyncJsonParse, encodeBase64Url } from "@tsmono/util";
 
-import { EvalScores } from "../../../@types/extraInspect";
+import { headlineMetric } from "../../../scoring/headline";
 import { fetchPendingSampleDataDirect } from "../../remote/remotePendingSampleData";
 import { normalizeEvalLog } from "../../utils/normalize";
 import { download_file } from "../shared/api-shared";
@@ -73,6 +75,16 @@ const transportRequestApi = (transport: ViewServerTransport) =>
  * itself never answers "which dir?" (see #392) — so this is a standalone
  * function over the transport rather than a method on the api.
  */
+/**
+ * A view-server JSON response, typed by the caller. This is the #555 API
+ * boundary: the server is a separate process on its own release cycle, so the
+ * shape here is a claim about the contract rather than something checked. Kept
+ * in one place so no other line in this module has to assert.
+ */
+const asResponse = <T>(parsed: unknown): T =>
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- API boundary (#555): see above
+  parsed as T;
+
 export async function fetchViewServerLogRoot(
   transport: ViewServerTransport = {},
   logDir?: string
@@ -84,7 +96,7 @@ export async function fetchViewServerLogRoot(
   // Note the last request time so we can get events
   // since the last request
   lastEvalTime = Date.now();
-  return logs.parsed as LogRoot | undefined;
+  return asResponse<LogRoot | undefined>(logs.parsed);
 }
 
 /**
@@ -95,9 +107,9 @@ export async function fetchViewServerLogDir(
   transport: ViewServerTransport = {}
 ): Promise<string | undefined> {
   const requestApi = transportRequestApi(transport);
-  const obj = (await requestApi.fetchString("GET", "/log-dir")).parsed as {
-    log_dir?: string;
-  };
+  const obj = asResponse<{ log_dir?: string }>(
+    (await requestApi.fetchString("GET", "/log-dir")).parsed
+  );
   return obj.log_dir;
 }
 
@@ -125,7 +137,7 @@ export function viewServerApi(
       "GET",
       `/events?${params.toString()}`
     );
-    return result.parsed as string[];
+    return asResponse<string[]>(result.parsed);
   };
 
   const get_logs = async (mtime: number, clientFileCount: number) => {
@@ -142,7 +154,7 @@ export function viewServerApi(
     lastEvalTime = Date.now();
 
     const envelope = await requestApi.fetchString("GET", path, headers);
-    return envelope.parsed as LogFilesResponse;
+    return asResponse<LogFilesResponse>(envelope.parsed);
   };
 
   const log_file_token = (mtime: number, fileCount: number) => {
@@ -162,7 +174,7 @@ export function viewServerApi(
 
     try {
       const result = await requestApi.fetchString("GET", path);
-      return result.parsed as EvalSet;
+      return asResponse<EvalSet>(result.parsed);
     } catch (error) {
       // if the eval set is not found, no biggee as not all
       // log directories will have an eval set.
@@ -221,23 +233,16 @@ export function viewServerApi(
       "GET",
       `/log-info/${encodeURIComponent(file)}`
     );
-    return result.parsed as LogInfo;
+    return asResponse<LogInfo>(result.parsed);
   };
 
   const toLogPreview = (header: EvalHeader): LogPreview => {
-    const scores: EvalScores = Object.values(header.results?.scores || {});
-    const metric = scores[0]?.metrics;
-    const evalMetrics = Object.values(metric || {});
-    const primary_metric = evalMetrics.length > 0 ? evalMetrics[0] : undefined;
+    const primary_metric = headlineMetric(
+      header.results,
+      header.eval.headline_metric
+    );
 
-    const model_roles = header.eval.model_roles
-      ? Object.fromEntries(
-          Object.entries(header.eval.model_roles).map(([role, cfg]) => [
-            role,
-            cfg.model,
-          ])
-        )
-      : undefined;
+    const model_roles = modelRoleNames(header.eval.model_roles);
 
     return {
       eval_id: header.eval.eval_id,
@@ -329,9 +334,13 @@ export function viewServerApi(
     const request: Request<PendingSampleResponse> = {
       headers,
       parse: async (text: string) => {
-        const pendingSamples = await asyncJsonParse<PendingSamples | undefined>(
-          text
-        );
+        const parsed = await asyncJsonParse<PendingSamples | undefined>(text);
+        // Boundary normalization (#555): the pending buffer is served by
+        // whatever inspect_ai version is running the eval — fill the
+        // read-time defaults old servers omit.
+        const pendingSamples = parsed
+          ? { ...parsed, samples: normalizeSampleSummaries(parsed.samples) }
+          : parsed;
         return {
           status: "OK",
           pendingSamples,
@@ -558,12 +567,12 @@ export function viewServerApi(
   const get_user_info = async (): Promise<UserInfo> => {
     const result = await requestApi.fetchString("GET", "/user-info");
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-    return (result.parsed as UserInfo) ?? {};
+    return asResponse<UserInfo>(result.parsed) ?? {};
   };
 
   const get_app_config = async (): Promise<AppConfig> => {
     const result = await requestApi.fetchString("GET", "/app-config");
-    return result.parsed as AppConfig;
+    return asResponse<AppConfig>(result.parsed);
   };
 
   const list_searches = async (
@@ -577,7 +586,7 @@ export function viewServerApi(
       "GET",
       `/scout/searches?${params.toString()}`
     );
-    return result.parsed as SearchInputListResponse;
+    return asResponse<SearchInputListResponse>(result.parsed);
   };
 
   const post_search = async (
@@ -591,7 +600,7 @@ export function viewServerApi(
       { "Content-Type": "application/json" },
       JSON.stringify(request)
     );
-    return result.parsed as SearchResponse;
+    return asResponse<SearchResponse>(result.parsed);
   };
 
   const get_search_result = async (
@@ -609,7 +618,7 @@ export function viewServerApi(
       `/searches/${encodeURIComponent(search_id)}${query ? `?${query}` : ""}`;
     try {
       const result = await requestApi.fetchString("GET", path);
-      return result.parsed as Result;
+      return asResponse<Result>(result.parsed);
     } catch (error) {
       if (error instanceof ApiError && error.status === 404) {
         return null;

@@ -3,14 +3,10 @@ import { renderHook } from "@testing-library/react";
 import type { RefObject } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ResizeObserverStub } from "../test/dom-stubs";
+
 import { useBreadcrumbTruncation } from "./useBreadcrumbTruncation";
 import type { BreadcrumbSegment } from "./useBreadcrumbTruncation";
-
-class ResizeObserverStub {
-  observe() {}
-  unobserve() {}
-  disconnect() {}
-}
 
 describe("useBreadcrumbTruncation", () => {
   const measuredBreadcrumbs: HTMLOListElement[] = [];
@@ -53,9 +49,9 @@ describe("useBreadcrumbTruncation", () => {
     );
     document.body.appendChild(container);
 
-    const containerRef = {
+    const containerRef: RefObject<HTMLElement> = {
       current: container,
-    } as RefObject<HTMLElement>;
+    };
     const hook = renderHook(() =>
       useBreadcrumbTruncation(segments, containerRef)
     );

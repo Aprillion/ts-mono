@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
@@ -10,7 +11,6 @@ import type {
 
 import { ContentDocumentView } from "../chat/documents/ContentDocumentView";
 import { MessageContent } from "../chat/MessageContent";
-import { defaultContext } from "../chat/MessageContents";
 import { ToolOutput } from "../chat/tools/ToolOutput";
 
 const remoteUrl = "https://example.com/media";
@@ -25,9 +25,7 @@ describe("typed media rendering", () => {
   it.each(remoteMediaCases)(
     "renders remote %s content as a link",
     (content, mediaTag) => {
-      const { container } = render(
-        <MessageContent contents={[content]} context={defaultContext()} />
-      );
+      const { container } = render(<MessageContent contents={[content]} />);
 
       const link = container.querySelector("a");
       expect(container.querySelector(mediaTag)).toBeNull();
@@ -58,7 +56,6 @@ describe("typed media rendering", () => {
             format: "mp4",
           },
         ]}
-        context={defaultContext()}
       />
     );
 
@@ -69,12 +66,13 @@ describe("typed media rendering", () => {
   });
 
   it("does not preview remote image documents", () => {
-    const document = {
+    const document: ContentDocument = {
       type: "document",
       document: `${remoteUrl}.png`,
       filename: "remote.png",
       mime_type: "image/png",
-    } as ContentDocument;
+      citations: false,
+    };
     const { container } = render(
       <ContentDocumentView id="document" document={document} />
     );
@@ -88,12 +86,13 @@ describe("typed media rendering", () => {
   it.each(["image/png", "IMAGE/PNG"])(
     "previews inline image documents with matching MIME type %s",
     (mimeType) => {
-      const document = {
+      const document: ContentDocument = {
         type: "document",
         document: "data:image/png;base64,AAAA",
         filename: "inline.png",
         mime_type: mimeType,
-      } as ContentDocument;
+        citations: false,
+      };
       const { container } = render(
         <ContentDocumentView id="document" document={document} />
       );

@@ -115,10 +115,13 @@ export const TagStrip: FC<TagStripProps> = ({
   // triggers a re-render and the effect re-runs to remeasure, so the
   // loop converges in a handful of re-renders regardless of
   // `tags.length`.
+  // eslint-disable-next-line tsmono/no-raw-use-effect -- baselined at rule introduction; migrate to a named hook or derived state
   useLayoutEffect(() => {
     if (!enableCollapse || !rowRef.current) return;
     const el = rowRef.current;
-    const kids = Array.from(el.children) as HTMLElement[];
+    const kids = Array.from(el.children).filter(
+      (kid): kid is HTMLElement => kid instanceof HTMLElement
+    );
     if (kids.length < 2) return;
     // Distinct offsetTop values across the row's flex items = number
     // of layout rows (flex-wrap: wrap puts each wrapped run on its
@@ -139,6 +142,7 @@ export const TagStrip: FC<TagStripProps> = ({
   // On any real width change, optimistically reset to the full set —
   // a wider row may now fit more chips than the previous trim
   // allowed. The trim effect above will re-converge after the reset.
+  // eslint-disable-next-line tsmono/no-raw-use-effect -- baselined at rule introduction; migrate to a named hook or derived state
   useLayoutEffect(() => {
     if (!enableCollapse || !rowRef.current) return;
     const el = rowRef.current;

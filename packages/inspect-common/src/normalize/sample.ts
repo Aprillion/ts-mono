@@ -3,6 +3,7 @@ import { isRecord } from "@tsmono/util";
 import type { EvalSample } from "../types";
 
 import { normalizeEvents, normalizeModelOutput } from "./events";
+import { normalizeModelUsageMap } from "./summary";
 
 /**
  * Normalize a raw EvalSample of any vintage into the current shape:
@@ -47,14 +48,12 @@ export const normalizeEvalSample = (raw: unknown): EvalSample => {
   if (!Array.isArray(sample["messages"])) sample["messages"] = [];
   sample["output"] = normalizeModelOutput(sample["output"]);
   if (!isRecord(sample["scores"])) sample["scores"] = null;
-  for (const field of [
-    "metadata",
-    "store",
-    "model_usage",
-    "role_usage",
-    "attachments",
-  ]) {
+  for (const field of ["metadata", "store", "attachments"]) {
     if (!isRecord(sample[field])) sample[field] = {};
+  }
+  // Usage entries carry their own required-with-default token fields.
+  for (const field of ["model_usage", "role_usage"]) {
+    sample[field] = normalizeModelUsageMap(sample[field]);
   }
   sample["events"] = normalizeEvents(sample["events"]);
 
@@ -85,7 +84,6 @@ export const normalizeEvalSample = (raw: unknown): EvalSample => {
     });
   }
 
-  // Boundary lift (#555): required fields are filled above; remaining
-  // content is wire data TypeScript can't verify.
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- boundary lift (#555): required fields are filled above; the rest is wire data TypeScript can't verify
   return sample as unknown as EvalSample;
 };

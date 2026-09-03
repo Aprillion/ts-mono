@@ -73,12 +73,46 @@ export function clampSize(
 }
 
 /**
+ * Merge freshly calculated sizes with the current sizing state: calculated
+ * sizes win except for manually resized columns, whose current size is
+ * preserved. Module-level (not inline in the hooks) so they stay compilable:
+ * React Compiler can't lower loops inside try/catch.
+ */
+export function mergeCalculatedSizing(
+  calculatedSizing: ColumnSizingState,
+  resizedSet: Set<string>,
+  currentSizing: ColumnSizingState
+): ColumnSizingState {
+  const newSizing: ColumnSizingState = {};
+  for (const [columnId, size] of Object.entries(calculatedSizing)) {
+    if (resizedSet.has(columnId) && currentSizing[columnId] !== undefined) {
+      newSizing[columnId] = currentSizing[columnId];
+    } else {
+      newSizing[columnId] = size;
+    }
+  }
+  return newSizing;
+}
+
+/**
  * Get the column ID from a column definition.
  */
 export function getColumnId<TData extends RowData>(
   column: ExtendedColumnDef<TData, BaseColumnMeta>
 ): string {
-  return column.id || (column as { accessorKey?: string }).accessorKey || "";
+  return column.id || columnAccessorKey(column) || "";
+}
+
+/**
+ * `accessorKey` is carried by only one member of TanStack's ColumnDef union,
+ * so reading it off the union takes a check rather than a claim.
+ */
+export function columnAccessorKey<TData extends RowData>(
+  column: ExtendedColumnDef<TData, BaseColumnMeta>
+): string | undefined {
+  return "accessorKey" in column && typeof column.accessorKey === "string"
+    ? column.accessorKey
+    : undefined;
 }
 
 /**

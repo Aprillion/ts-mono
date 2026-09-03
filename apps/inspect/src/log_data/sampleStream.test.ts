@@ -1,9 +1,13 @@
-/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return --
-   Mock event fixtures are intentionally minimal `any` stubs, and the
-   assertions reach into their dynamically-shaped fields. */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { SampleData, SampleDataResponse } from "../client/api/types";
+import {
+  expectEvent,
+  testInfoEvent,
+  testModelEvent,
+  testModelOutput,
+} from "@tsmono/inspect-common/testing";
+
+import { EventData, SampleData, SampleDataResponse } from "../client/api/types";
 
 import {
   createSampleStreamSession,
@@ -28,15 +32,27 @@ const okResponse = (
   ...extra,
 });
 
-const eventData = (id: number, eventId: string, event: unknown) => ({
+const eventData = (
+  id: number,
+  eventId: string,
+  event: EventData["event"]
+): EventData => ({
   id,
   event_id: eventId,
   sample_id: "sample-1",
   epoch: 1,
-  event: event as never,
+  event,
 });
 
-const infoEvent = (data: string) => ({ event: "info", data });
+const infoEvent = (data: string) => testInfoEvent({ data });
+
+/**
+ * A skewed (older) live server can stream events of an older schema; the
+ * cases that cover the normalizer's handling of those opt in here.
+ */
+const legacyEvent = (value: unknown): EventData["event"] =>
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- deliberately out of contract: see above
+  value as EventData["event"];
 
 const attachment = (id: number, hash: string, content: string) => ({
   id,
@@ -171,10 +187,13 @@ describe("createSampleStreamSession", () => {
     const session = makeSession();
     const first = await session.tick(false);
     expect(first.done).toBe(false);
-    expect(first.events.map((e: any) => e.data)).toEqual(["first", "second"]);
+    expect(first.events.map((e) => expectEvent(e, "info").data)).toEqual([
+      "first",
+      "second",
+    ]);
 
     const second = await session.tick(false);
-    expect(second.events.map((e: any) => e.data)).toEqual([
+    expect(second.events.map((e) => expectEvent(e, "info").data)).toEqual([
       "first-updated",
       "second",
       "third",
@@ -189,7 +208,11 @@ describe("createSampleStreamSession", () => {
     mockApi.get_log_sample_data.mockResolvedValueOnce(
       okResponse({
         events: [
-          eventData(1, "e1", { event: "model", timestamp: "t", model: "m" }),
+          eventData(
+            1,
+            "e1",
+            legacyEvent({ event: "model", timestamp: "t", model: "m" })
+          ),
         ],
       })
     );
@@ -237,11 +260,11 @@ describe("createSampleStreamSession", () => {
         ],
         events: [
           eventData(1, "e1", infoEvent("attachment://direct")),
-          eventData(2, "e2", {
-            event: "model",
-            input: [],
-            input_refs: [[0, 1]],
-          }),
+          eventData(
+            2,
+            "e2",
+            testModelEvent({ input: [], input_refs: [[0, 1]] })
+          ),
         ],
       })
     );
@@ -249,10 +272,83 @@ describe("createSampleStreamSession", () => {
     const session = makeSession();
     const { events } = await session.tick(false);
 
-    expect((events[0] as any).data).toBe("direct content");
+    expect(expectEvent(events[0], "info").data).toBe("direct content");
     // The pooled message's attachment:// ref is only visible after ref
     // expansion; the second resolution pass must have caught it.
-    expect((events[1] as any).input[0].content).toBe("pooled content");
+    expect(expectEvent(events[1], "model").input[0]?.content).toBe(
+      "pooled content"
+    );
+  });
+
+  it("reports each missing attachment id once per session", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    mockApi.get_log_sample_data
+      .mockResolvedValueOnce(
+        okResponse({
+          events: [
+            eventData(1, "e1", infoEvent("attachment://missing")),
+            eventData(
+              2,
+              "e2",
+              testInfoEvent({
+                data: {
+                  a: "attachment://missing",
+                  b: "attachment://missing",
+                  c: "attachment://also-missing",
+                },
+              })
+            ),
+          ],
+        })
+      )
+      .mockResolvedValueOnce(
+        okResponse({
+          events: [eventData(3, "e3", infoEvent("attachment://missing"))],
+        })
+      );
+
+    const session = makeSession();
+    await session.tick(false);
+    await session.tick(false);
+
+    const reportedIds = mockApi.log_message.mock.calls.map(
+      ([, message]) =>
+        /Unable to resolve attachment (\S+)/.exec(String(message))?.[1]
+    );
+    expect(reportedIds).toEqual(["missing", "also-missing"]);
+    expect(warn).toHaveBeenCalledTimes(2);
+    warn.mockRestore();
+  });
+
+  it("reports attachment misses that only surface after pool expansion", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    mockApi.get_log_sample_data.mockResolvedValueOnce(
+      okResponse({
+        message_pool: [
+          messagePoolEntry(
+            1,
+            chatMessage("m1", "user", "attachment://pooled-missing")
+          ),
+        ],
+        events: [
+          eventData(
+            1,
+            "e1",
+            testModelEvent({ input: [], input_refs: [[0, 1]] })
+          ),
+        ],
+      })
+    );
+
+    const session = makeSession();
+    await session.tick(false);
+
+    const reportedIds = mockApi.log_message.mock.calls.map(
+      ([, message]) =>
+        /Unable to resolve attachment (\S+)/.exec(String(message))?.[1]
+    );
+    expect(reportedIds).toEqual(["pooled-missing"]);
+    warn.mockRestore();
   });
 
   it("does not let duplicate streamed pool rows shift refs", async () => {
@@ -284,22 +380,22 @@ describe("createSampleStreamSession", () => {
           callPoolEntry(3, assistant),
         ],
         events: [
-          eventData(1, "model-event-1", {
-            event: "model",
-            input: [],
-            input_refs: [[0, 3]],
-            model: "test",
-            tools: [],
-            tool_choice: "auto",
-            config: {},
-            output: { model: "test", choices: [] },
-            call: {
-              request: { model: "test" },
-              response: null,
-              call_refs: [[0, 3]],
-              call_key: "messages",
-            },
-          }),
+          eventData(
+            1,
+            "model-event-1",
+            testModelEvent({
+              input: [],
+              input_refs: [[0, 3]],
+              model: "test",
+              output: testModelOutput({ model: "test" }),
+              call: {
+                request: { model: "test" },
+                response: null,
+                call_refs: [[0, 3]],
+                call_key: "messages",
+              },
+            })
+          ),
         ],
       })
     );
@@ -307,12 +403,12 @@ describe("createSampleStreamSession", () => {
     const session = makeSession();
     const { events } = await session.tick(false);
 
-    expect((events[0] as any).input).toEqual([
+    expect(expectEvent(events[0], "model").input).toEqual([
       inputSystem,
       inputUser,
       inputAssistant,
     ]);
-    expect((events[0] as any).call.request.messages).toEqual([
+    expect(expectEvent(events[0], "model").call?.request.messages).toEqual([
       system,
       user,
       assistant,
@@ -340,14 +436,17 @@ describe("createSampleStreamSession", () => {
     // One segment per tick: the partial backlog paints instead of waiting
     // for the full drain; the signals tell the caller to re-tick immediately.
     expect(mockApi.get_log_sample_data).toHaveBeenCalledTimes(1);
-    expect(first.events.map((e: any) => e.data)).toEqual(["a"]);
+    expect(first.events.map((e) => expectEvent(e, "info").data)).toEqual(["a"]);
     expect(first.hasMore).toBe(true);
     expect(first.advanced).toBe(true);
     expect(first.done).toBe(false);
 
     const second = await session.tick(false);
     expect(cursorArgs(1)?.[0]).toBe(1);
-    expect(second.events.map((e: any) => e.data)).toEqual(["a", "b"]);
+    expect(second.events.map((e) => expectEvent(e, "info").data)).toEqual([
+      "a",
+      "b",
+    ]);
     expect(second.hasMore).toBe(false);
     expect(second.done).toBe(false);
   });
@@ -447,7 +546,9 @@ describe("createSampleStreamSession", () => {
     const after = await session.tick(false);
 
     expect(cursorArgs(1)).toEqual([-1, -1, -1, -1]);
-    expect(after.events.map((e: any) => e.data)).toEqual(["fresh"]);
+    expect(after.events.map((e) => expectEvent(e, "info").data)).toEqual([
+      "fresh",
+    ]);
     expect(after.events).not.toBe(before.events);
   });
 

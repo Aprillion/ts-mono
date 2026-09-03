@@ -30,6 +30,8 @@ import type {
 } from "@tsmono/inspect-common/types";
 
 import {
+  asTimelineEvent,
+  asTimelineSpan,
   buildTimeline,
   convertServerTimeline,
   countUtilitySpans,
@@ -39,6 +41,7 @@ import {
   TimelineEvent,
   TimelineSpan,
 } from "./core";
+import { rawEventBuilders } from "./testHelpers";
 
 // =============================================================================
 // Helpers
@@ -101,12 +104,8 @@ describe("convertServerTimeline", () => {
       expect(result.description).toBe("test timeline");
       expect(result.root.content).toHaveLength(2);
       expect(result.root.content[0]).toBeInstanceOf(TimelineEvent);
-      expect((result.root.content[0] as TimelineEvent).event.uuid).toBe(
-        "evt-1"
-      );
-      expect((result.root.content[1] as TimelineEvent).event.uuid).toBe(
-        "evt-2"
-      );
+      expect(asTimelineEvent(result.root.content[0]).event.uuid).toBe("evt-1");
+      expect(asTimelineEvent(result.root.content[1]).event.uuid).toBe("evt-2");
     });
 
     it("filters out events with missing UUIDs", () => {
@@ -126,9 +125,7 @@ describe("convertServerTimeline", () => {
       const result = convertServerTimeline(server, events);
 
       expect(result.root.content).toHaveLength(1);
-      expect((result.root.content[0] as TimelineEvent).event.uuid).toBe(
-        "evt-1"
-      );
+      expect(asTimelineEvent(result.root.content[0]).event.uuid).toBe("evt-1");
     });
 
     it("handles empty events array", () => {
@@ -184,13 +181,13 @@ describe("convertServerTimeline", () => {
       expect(result.root.content).toHaveLength(2);
       expect(result.root.content[0]).toBeInstanceOf(TimelineEvent);
 
-      const childSpan = result.root.content[1] as TimelineSpan;
+      const childSpan = asTimelineSpan(result.root.content[1]);
       expect(childSpan).toBeInstanceOf(TimelineSpan);
       expect(childSpan.name).toBe("explore");
       expect(childSpan.spanType).toBe("agent");
       expect(childSpan.content).toHaveLength(2);
 
-      const grandchild = childSpan.content[1] as TimelineSpan;
+      const grandchild = asTimelineSpan(childSpan.content[1]);
       expect(grandchild).toBeInstanceOf(TimelineSpan);
       expect(grandchild.name).toBe("build");
       expect(grandchild.content).toHaveLength(1);
@@ -218,7 +215,7 @@ describe("convertServerTimeline", () => {
       );
 
       const result = convertServerTimeline(server, events);
-      const agent = result.root.content[0] as TimelineSpan;
+      const agent = asTimelineSpan(result.root.content[0]);
 
       expect(agent.id).toBe("agent-1");
       expect(agent.name).toBe("helper");
@@ -354,7 +351,7 @@ describe("convertServerTimeline", () => {
 
       const result = convertServerTimeline(server, events);
 
-      const child = result.root.content[0] as TimelineSpan;
+      const child = asTimelineSpan(result.root.content[0]);
       expect(child.branches).toHaveLength(1);
       expect(child.branches[0]!.branchedFrom).toBe("msg-nested");
     });
@@ -621,7 +618,7 @@ describe("convertServerTimeline", () => {
         description: "",
         root,
       });
-      const newChild = result.root.content[0] as TimelineSpan;
+      const newChild = asTimelineSpan(result.root.content[0]);
       expect(newChild.branches).toHaveLength(0);
     });
   });
@@ -704,16 +701,11 @@ describe("utility wrapper ids", () => {
   // deterministic without them. (The JSON fixtures can't express this case —
   // the Python side auto-assigns uuids at parse time.)
   it("assigns unique position-derived ids to uuid-less wrapped events", () => {
-    let clock = 0;
-    const ts = () =>
-      new Date(Date.UTC(2026, 0, 1, 0, 0, ++clock)).toISOString();
+    const { nextTs, base } = rawEventBuilders();
     const warmup = () =>
       testModelEvent({
-        uuid: null,
-        timestamp: ts(),
-        completed: ts(),
-        pending: false,
-        metadata: null,
+        ...base(),
+        completed: nextTs(),
         span_id: "monitor",
         model: "mockllm/model",
         config: { max_tokens: 1 },
@@ -728,23 +720,16 @@ describe("utility wrapper ids", () => {
           usage: testModelUsage({ input_tokens: 5, output_tokens: 1 }),
         }),
       });
-    const spanMeta = () => ({
-      timestamp: ts(),
-      pending: false,
-      metadata: null,
-      uuid: null,
-    });
-
     const timeline = buildTimeline([
       testSpanBeginEvent({
-        ...spanMeta(),
+        ...base(),
         id: "solvers",
         name: "solvers",
         type: "solvers",
         parent_id: null,
       }),
       testSpanBeginEvent({
-        ...spanMeta(),
+        ...base(),
         id: "monitor",
         name: "monitor",
         type: "agent",
@@ -752,8 +737,8 @@ describe("utility wrapper ids", () => {
       }),
       warmup(),
       warmup(),
-      testSpanEndEvent({ ...spanMeta(), id: "monitor" }),
-      testSpanEndEvent({ ...spanMeta(), id: "solvers" }),
+      testSpanEndEvent({ ...base(), id: "monitor" }),
+      testSpanEndEvent({ ...base(), id: "solvers" }),
     ]);
 
     const wrappers = timeline.root.content.filter(

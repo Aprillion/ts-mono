@@ -58,6 +58,7 @@ export const EditTagsDialog: FC<EditTagsDialogProps> = ({
   // so the user doesn't have to retype themselves for every edit. The
   // fetch is best-effort — a missing endpoint or empty result simply
   // leaves the field blank.
+  // eslint-disable-next-line tsmono/no-raw-use-effect -- baselined at rule introduction; migrate to a named hook or derived state
   useEffect(() => {
     if (!showing) return;
     let cancelled = false;
@@ -124,7 +125,7 @@ export const EditTagsDialog: FC<EditTagsDialogProps> = ({
   // so we can read/write it synchronously without scheduling a render.
   const inFlightRef = useRef(false);
 
-  const handleSave = async () => {
+  const handleSave = (): void => {
     if (!canSave || inFlightRef.current || !api.edit_log) return;
     inFlightRef.current = true;
     // NOTE: we intentionally do NOT call `setError(undefined)` here.
@@ -141,30 +142,34 @@ export const EditTagsDialog: FC<EditTagsDialogProps> = ({
     // before any network IO) don't flash the indicator on and off.
     // For slower saves the indicator still appears.
     const indicatorTimer = window.setTimeout(() => setSubmitting(true), 200);
-    try {
-      const edit: TagsEdit = {
-        type: "tags",
-        tags_add: tagsAdd,
-        tags_remove: tagsRemove,
-      };
-      await api.edit_log(logFile, {
+    const provenance = {
+      author: author.trim(),
+      reason: reason.trim() || undefined,
+      metadata: {},
+      timestamp: new Date().toISOString(),
+    };
+    const edit: TagsEdit = {
+      type: "tags",
+      tags_add: tagsAdd,
+      tags_remove: tagsRemove,
+    };
+    api
+      .edit_log(logFile, {
         edits: [edit],
-        provenance: {
-          author: author.trim(),
-          reason: reason.trim() || undefined,
-          metadata: {},
-          timestamp: new Date().toISOString(),
-        },
+        provenance,
+      })
+      .then(() => {
+        setShowing(false);
+        if (onSaved) {
+          onSaved();
+        }
+      })
+      .catch((err: unknown) => setError(formatEditError(err)))
+      .finally(() => {
+        window.clearTimeout(indicatorTimer);
+        setSubmitting(false);
+        inFlightRef.current = false;
       });
-      setShowing(false);
-      onSaved?.();
-    } catch (err) {
-      setError(formatEditError(err));
-    } finally {
-      window.clearTimeout(indicatorTimer);
-      setSubmitting(false);
-      inFlightRef.current = false;
-    }
   };
 
   return (
@@ -189,7 +194,7 @@ export const EditTagsDialog: FC<EditTagsDialogProps> = ({
             <button
               type="button"
               className={clsx("btn", "btn-primary", "text-size-smaller")}
-              onClick={() => void handleSave()}
+              onClick={handleSave}
               disabled={!canSave}
             >
               {submitting ? "Saving…" : "Save"}

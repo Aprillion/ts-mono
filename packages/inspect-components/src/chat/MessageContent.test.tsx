@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { cleanup, render, waitFor } from "@testing-library/react";
 import { ComponentProps } from "react";
 import { afterEach, describe, expect, it } from "vitest";
@@ -6,58 +7,26 @@ import type { ContentText } from "@tsmono/inspect-common/types";
 import {
   ComponentIconProvider,
   ComponentNavigationProvider,
-  type ComponentIcons,
 } from "@tsmono/react/components";
-import {
-  ComponentStateProvider,
-  type ComponentStateHooks,
-} from "@tsmono/react/state";
+import { ComponentStateProvider } from "@tsmono/react/state";
+import { makeStateHooks, testIcons } from "@tsmono/react/testing";
 
 import { DisplayModeContext } from "../content/DisplayModeContext";
 
 import { MessageContent } from "./MessageContent";
-import { defaultContext } from "./MessageContents";
 
 type Contents = ComponentProps<typeof MessageContent>["contents"];
-
-const stateHooks: ComponentStateHooks = {
-  useValue: (_id, _prop, defaultValue) => defaultValue,
-  useSetValue: () => () => {},
-  useRemoveValue: () => () => {},
-  useEntries: () => undefined,
-  useRemoveAll: () => () => {},
-  useRemoveByPrefix: () => () => {},
-};
-
-const icons: ComponentIcons = {
-  arrowDown: "icon-arrow-down",
-  arrowUp: "icon-arrow-up",
-  chevronDown: "icon-chevron-down",
-  chevronUp: "icon-chevron-up",
-  clearText: "icon-clear-text",
-  close: "icon-close",
-  code: "icon-code",
-  confirm: "icon-confirm",
-  copy: "icon-copy",
-  error: "icon-error",
-  menu: "icon-menu",
-  next: "icon-next",
-  noSamples: "icon-no-samples",
-  play: "icon-play",
-  previous: "icon-previous",
-  toggleRight: "icon-toggle-right",
-};
 
 const renderMessage = (
   contents: Contents,
   displayMode: "rendered" | "raw" = "rendered"
 ) =>
   render(
-    <ComponentStateProvider hooks={stateHooks}>
-      <ComponentIconProvider icons={icons}>
+    <ComponentStateProvider hooks={makeStateHooks()}>
+      <ComponentIconProvider icons={testIcons}>
         <ComponentNavigationProvider navigation={{ navigate: () => {} }}>
           <DisplayModeContext.Provider value={{ displayMode }}>
-            <MessageContent contents={contents} context={defaultContext()} />
+            <MessageContent contents={contents} />
           </DisplayModeContext.Provider>
         </ComponentNavigationProvider>
       </ComponentIconProvider>
@@ -89,6 +58,22 @@ describe("MessageContent evidence fidelity", () => {
     const { container } = renderMessage(text, "raw");
 
     expect(container.querySelector("pre")?.textContent).toBe(text);
+  });
+
+  it("marks the last rendered block as last after text blocks merge", async () => {
+    // Rendered mode collapses consecutive text blocks, so "last" must be
+    // judged against the merged list, not the original contents length.
+    const text = (t: string): ContentText => ({
+      type: "text",
+      text: t,
+      citations: null,
+    });
+    const { container } = renderMessage([text("first"), text("second")]);
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("second");
+    });
+    expect(container.querySelector(".no-last-para-padding")).not.toBeNull();
   });
 
   it("does not inject citation markers into raw text", () => {

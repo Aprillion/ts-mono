@@ -446,13 +446,14 @@ export const SamplesTab: FC<SamplesTabProps> = ({
         data: sample,
         answer:
           samplesDescriptor.selectedScorerDescriptor(sample)?.answer() ?? "",
-        completed: sample.completed ?? true,
+        completed: sample.completed,
         input: inputString(sample.input).join(" "),
         target: Array.isArray(sample.target)
           ? sample.target.join(", ")
           : sample.target,
         error: sample.error,
         limit: sample.limit,
+        limit_reason: sample.limit_reason,
         retries: sample.retries,
         fallbacks: totalModelFallbacks(sample.model_fallbacks) || undefined,
         tokens,
@@ -461,6 +462,7 @@ export const SamplesTab: FC<SamplesTabProps> = ({
     });
   }, [sampleSummaries, samplesDescriptor, selectedLogFile]);
 
+  // eslint-disable-next-line tsmono/no-raw-use-effect -- baselined at rule introduction; migrate to a named hook or derived state
   useEffect(() => {
     const sample =
       sampleSummaries.length === 1 ? sampleSummaries[0] : undefined;

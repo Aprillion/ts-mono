@@ -30,6 +30,7 @@ import { useLoggingNavigate } from "../../../debugging/navigationDebugging";
 import { ApplicationIcons } from "../../../icons";
 import { openRouteInNewTab } from "../../../router/url";
 import type { FilterType } from "../../../state/store";
+import { columnAccessorKey } from "../columnSizing/types";
 import {
   BaseColumnMeta,
   ExtendedColumnDef,
@@ -214,10 +215,7 @@ export function DataGrid<
       return columnOrder;
     }
     // Default to column order from column definitions
-    return columns.map(
-      (col) =>
-        (col.id ?? (col as { accessorKey?: string }).accessorKey) as string
-    );
+    return columns.map((col) => col.id ?? columnAccessorKey(col) ?? "");
   }, [columnOrder, columns]);
 
   // Drag and drop state
@@ -381,7 +379,7 @@ export function DataGrid<
         }
       } else {
         // Normal click: Navigate to row
-        // eslint-disable-next-line @typescript-eslint/no-floating-promises
+
         navigate(getRowRoute(row.original));
       }
     },
@@ -432,7 +430,6 @@ export function DataGrid<
           if (focusedIndex !== -1) {
             const row = rows[focusedIndex];
             if (row) {
-              // eslint-disable-next-line @typescript-eslint/no-floating-promises
               navigate(getRowRoute(row.original));
             }
           }
@@ -567,11 +564,13 @@ export function DataGrid<
   );
 
   // Check on mount if we need to fetch more
+  // eslint-disable-next-line tsmono/no-raw-use-effect -- baselined at rule introduction; migrate to a named hook or derived state
   useEffect(() => {
     checkScrollNearEnd(containerRef.current);
   }, [checkScrollNearEnd]);
 
   // Scroll focused row into view when it changes
+  // eslint-disable-next-line tsmono/no-raw-use-effect -- baselined at rule introduction; migrate to a named hook or derived state
   useEffect(() => {
     if (focusedRowId && containerRef.current) {
       const focusedIndex = rows.findIndex((r) => r.id === focusedRowId);
@@ -620,7 +619,8 @@ export function DataGrid<
           {table.getHeaderGroups().map((headerGroup) => (
             <tr key={headerGroup.id} className={styles.headerRow}>
               {headerGroup.headers.map((header) => {
-                const columnDef = header.column.columnDef as TColumn;
+                const columnDef: ExtendedColumnDef<TData, BaseColumnMeta> =
+                  header.column.columnDef;
                 const columnMeta = columnDef.meta;
                 const align = columnMeta?.align;
                 const filterType = columnMeta?.filterType;
@@ -686,7 +686,7 @@ export function DataGrid<
                             )}
                           />
                         ),
-                      }[header.column.getIsSorted() as string] ?? null}
+                      }[header.column.getIsSorted() || "none"] ?? null}
                     </button>
                     {columnMeta?.filterable && filterType ? (
                       <ColumnFilterControl
@@ -746,7 +746,10 @@ export function DataGrid<
                   onClick={(e) => handleRowClick(e, row.id, virtualRow.index)}
                 >
                   {row.getVisibleCells().map((cell) => {
-                    const cellColumnDef = cell.column.columnDef as TColumn;
+                    const cellColumnDef: ExtendedColumnDef<
+                      TData,
+                      BaseColumnMeta
+                    > = cell.column.columnDef;
                     const cellAlign = cellColumnDef.meta?.align;
                     const titleValue = getCellTitleValue(
                       cell.getValue(),

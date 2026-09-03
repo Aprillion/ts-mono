@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { act, render } from "@testing-library/react";
 import { useRef } from "react";
 import { describe, expect, it, vi } from "vitest";
@@ -5,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   testAssistantMessage,
   testChatCompletionChoice,
+  testInfoEvent,
   testModelEvent,
   testModelOutput,
 } from "@tsmono/inspect-common/testing";
@@ -19,7 +21,7 @@ import {
 import { TimelineEvent, TimelineSpan } from "../timeline/core";
 import type { SwimlaneRow } from "../timeline/swimlaneRows";
 import type { TranscriptViewNodesHandle } from "../TranscriptViewNodes";
-import type { EventNode } from "../types";
+import { EventNode } from "../types";
 
 import { useTranscriptSearchSource } from "./useTranscriptSearchSource";
 
@@ -131,7 +133,7 @@ interface Harness {
  */
 function renderHarness(opts: HarnessOptions): Harness {
   const flattened: EventNode[] = (opts.flattenedNodeIds ?? []).map(
-    (id) => ({ id }) as EventNode
+    (id) => new EventNode(id, testInfoEvent({ uuid: id }), 0)
   );
   const harness: Partial<Harness> = {};
   const Probe = () => {
@@ -164,9 +166,9 @@ function renderHarness(opts: HarnessOptions): Harness {
       </FindTargetProvider>
     </ExtendedFindProvider>
   );
-  if (!harness.countAll || !harness.search)
-    throw new Error("harness not ready");
-  return harness as Harness;
+  const { countAll, search } = harness;
+  if (!countAll || !search) throw new Error("harness not ready");
+  return { ...harness, countAll, search };
 }
 
 // =============================================================================
@@ -261,7 +263,7 @@ describe("useTranscriptSearchSource", () => {
     // Both e2 (skipped) and e3 (landed) are scrolled to; the production
     // code calls scrollToEvent for each attempt. The contract that matters
     // is the LAST scroll target.
-    const lastScroll = scrollToEvent.mock.calls.at(-1) as [string] | undefined;
+    const lastScroll = scrollToEvent.mock.calls.at(-1);
     expect(lastScroll?.[0]).toBe("e3");
   });
 });
