@@ -2649,7 +2649,12 @@ export interface components {
         RawEncoding: "zstd";
         /**
          * Reference
-         * @description Reference to scanned content.
+         * @description Reference from a score to content in the scored transcript.
+         *
+         *     References are stored as a list of dicts under a score's
+         *     `metadata["scanner_references"]` key. Inspect View identifies scanner
+         *     scores by the presence of that key and renders cites in the score's
+         *     explanation (e.g. `[M22]`) as links to the referenced content.
          */
         Reference: {
             /** Cite */
@@ -4109,6 +4114,8 @@ export interface components {
                 [key: string]: unknown;
             } | null;
             score?: components["schemas"]["JsonValue"] | null;
+            /** Score Explanation */
+            score_explanation?: string | null;
             /** Source Id */
             source_id?: string | null;
             /** Source Type */
@@ -4174,6 +4181,8 @@ export interface components {
                 [key: string]: unknown;
             } | null;
             score?: components["schemas"]["JsonValue"] | null;
+            /** Score Explanation */
+            score_explanation?: string | null;
             /** Source Id */
             source_id?: string | null;
             /** Source Type */
