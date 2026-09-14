@@ -898,22 +898,12 @@
     }
   },
   "apps/scout/src/app/runScan/ActiveScanView.tsx": {
-    "@typescript-eslint/no-unnecessary-condition": {
-      "count": 3,
-      "undescribed": 2
-    },
     "react-hooks/purity": {
       "count": 1,
       "undescribed": 1
     },
     "tsmono/no-raw-use-effect": {
       "count": 1
-    }
-  },
-  "apps/scout/src/app/scan/info/ScanInfo.tsx": {
-    "@typescript-eslint/no-unnecessary-condition": {
-      "count": 2,
-      "undescribed": 2
     }
   },
   "apps/scout/src/app/scan/scanners/dataframe/ScannerDataframeColumnsPopover.tsx": {
@@ -954,11 +944,6 @@
       "undescribed": 1
     }
   },
-  "apps/scout/src/app/scan/scanners/ScannerSidebar.tsx": {
-    "@typescript-eslint/no-unnecessary-condition": {
-      "count": 6
-    }
-  },
   "apps/scout/src/app/scan/ScanPanel.tsx": {
     "tsmono/no-raw-use-effect": {
       "count": 2
@@ -978,10 +963,6 @@
     }
   },
   "apps/scout/src/app/scannerResult/result/ResultBody.tsx": {
-    "@typescript-eslint/no-unnecessary-condition": {
-      "count": 3,
-      "undescribed": 3
-    },
     "tsmono/no-raw-use-effect": {
       "count": 1
     }
@@ -1029,20 +1010,11 @@
     }
   },
   "apps/scout/src/app/transcript/TranscriptBody.tsx": {
-    "@typescript-eslint/no-unnecessary-condition": {
-      "count": 6
-    },
     "react-hooks/refs": {
       "count": 1
     },
     "tsmono/no-raw-use-effect": {
       "count": 2
-    }
-  },
-  "apps/scout/src/app/transcript/TranscriptEventPanel.tsx": {
-    "@typescript-eslint/no-unnecessary-condition": {
-      "count": 3,
-      "undescribed": 2
     }
   },
   "apps/scout/src/app/transcript/TranscriptPanel.tsx": {
@@ -1129,9 +1101,6 @@
     }
   },
   "apps/scout/src/app/validation/components/ValidationSetSelector.tsx": {
-    "@typescript-eslint/no-unnecessary-condition": {
-      "count": 1
-    },
     "tsmono/no-raw-use-effect": {
       "count": 3
     }
@@ -1459,11 +1428,6 @@
       "count": 1
     }
   },
-  "packages/inspect-components/src/transcript/eventText.ts": {
-    "@typescript-eslint/no-unnecessary-condition": {
-      "count": 7
-    }
-  },
   "packages/inspect-components/src/transcript/FocusTurnView.tsx": {
     "react-hooks/refs": {
       "count": 1
@@ -1537,11 +1501,6 @@
       "count": 1
     }
   },
-  "packages/inspect-components/src/transcript/ModelEventView.tsx": {
-    "@typescript-eslint/no-unnecessary-condition": {
-      "count": 6
-    }
-  },
   "packages/inspect-components/src/transcript/outline/TranscriptOutline.tsx": {
     "tsmono/no-raw-use-effect": {
       "count": 2
@@ -1592,11 +1551,6 @@
     "@typescript-eslint/no-unnecessary-condition": {
       "count": 3,
       "undescribed": 3
-    }
-  },
-  "packages/inspect-components/src/transcript/timeline/core.ts": {
-    "@typescript-eslint/no-unnecessary-condition": {
-      "count": 8
     }
   },
   "packages/inspect-components/src/transcript/timeline/fixtureTimeline.test.ts": {

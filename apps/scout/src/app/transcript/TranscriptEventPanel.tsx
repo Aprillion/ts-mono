@@ -146,8 +146,7 @@ export const TranscriptEventPanel: FC = () => {
     );
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-  if (loading && !transcript) {
+  if (loading) {
     return (
       <>
         {header}
@@ -160,8 +159,7 @@ export const TranscriptEventPanel: FC = () => {
     );
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-  if (transcript && nav.slice.length === 0) {
+  if (nav.slice.length === 0) {
     return (
       <>
         {header}
@@ -179,8 +177,7 @@ export const TranscriptEventPanel: FC = () => {
         header={header}
         className={styles.focusRoot}
         error={
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- intentional: data isn't validated at the wire (#555); old files may omit type-required fields
-          transcript?.error
+          transcript.error
             ? { label: "Transcript error", message: transcript.error }
             : undefined
         }
