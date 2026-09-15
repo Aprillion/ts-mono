@@ -24,13 +24,14 @@ import {
   ComponentIconProvider,
   ComponentIcons,
 } from "@tsmono/react/components";
-import { useMountEffect } from "@tsmono/react/hooks";
+import { useEventListener, useMountEffect } from "@tsmono/react/hooks";
 import { ComponentStateProvider } from "@tsmono/react/state";
-import { basename, isUri } from "@tsmono/util";
+import { basename, getVscodeApi, isUri } from "@tsmono/util";
 import { ZustandDevtoolsPanel } from "@tsmono/zustand-devtools";
 
 import {
   AppConfigGate,
+  LogLocationGate,
   readEmbeddedStartupState,
   resolveEmbeddedLogDir,
   setLogRoot,
@@ -146,14 +147,10 @@ export const AppContent: FC = () => {
     [setInitialState, rehydrated]
   );
 
-  // listen for updateState messages from vscode
-  // eslint-disable-next-line tsmono/no-raw-use-effect -- baselined at rule introduction; migrate to a named hook or derived state
-  useEffect(() => {
-    window.addEventListener("message", onMessage);
-    return () => {
-      window.removeEventListener("message", onMessage);
-    };
-  }, [onMessage]);
+  // Only the VS Code host may drive the log location. A window message can't
+  // be authenticated (any page embedding the viewer can post one), so outside
+  // VS Code the bridge is never attached (#615).
+  useEventListener(getVscodeApi() ? window : null, "message", onMessage);
 
   // Embedded state (VS Code) is the host-message bootstrap and feeds the same
   // onMessage bridge as live postMessage events. The URL-param single-file
@@ -204,9 +201,11 @@ const ZustandStorePanel: FC<{ theme: "light" | "dark" }> = ({ theme }) =>
 
 export const App: FC = () => (
   <QueryClientProvider client={queryClient}>
-    <AppConfigGate>
-      <AppContent />
-    </AppConfigGate>
+    <LogLocationGate>
+      <AppConfigGate>
+        <AppContent />
+      </AppConfigGate>
+    </LogLocationGate>
     {/* navigator.webdriver: skip devtools under Playwright — the floating
         button is an extra img/button that trips strict-mode locators. */}
     {import.meta.env.DEV && !navigator.webdriver && (
