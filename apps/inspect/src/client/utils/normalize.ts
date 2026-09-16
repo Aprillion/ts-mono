@@ -15,7 +15,7 @@ import {
 import { isRecord } from "@tsmono/util";
 
 import { EvalLogStatus } from "../../@types/extraInspect";
-import { EvalHeader } from "../api/types";
+import { EvalHeader, LogPreview } from "../api/types";
 import { LogStart } from "../remote/remoteLogFile";
 
 /**
@@ -55,6 +55,60 @@ export const normalizeEvalHeader = (raw: unknown): EvalHeader => {
         : normalizeConfigUpdates(raw["config_updates"]),
   };
   /* eslint-enable @typescript-eslint/no-unsafe-type-assertion */
+};
+
+const stringOr = (value: unknown, fallback: string): string =>
+  typeof value === "string" ? value : fallback;
+
+/**
+ * Normalize one `listing.json` entry (pydantic's `LogOverview`). Like
+ * `normalizeEvalSpec`, this fills only what the type requires: the required
+ * strings ("" when missing, `eval_id` synthesized from run_id/task_id/
+ * started_at) and `task_version` (0). Everything else is wire data and passes
+ * through untouched: bundles built by older inspect_ai releases predate
+ * `model_roles` and `invalidated`, and write with exclude_none, so optional
+ * fields are routinely absent and stay absent.
+ */
+export const normalizeLogPreview = (raw: unknown): LogPreview => {
+  if (!isRecord(raw)) {
+    throw new Error("Invalid log preview: expected an object");
+  }
+  const run_id = stringOr(raw["run_id"], "");
+  const task_id = stringOr(raw["task_id"], "");
+  const started_at = stringOr(raw["started_at"], "");
+  const task_version = raw["task_version"];
+  return {
+    // Spread first so fields the schema grows later survive parsing (matching
+    // normalizeEvalHeader); required fields override below.
+    ...raw,
+    eval_id: stringOr(raw["eval_id"], `${run_id}-${task_id}-${started_at}`),
+    run_id,
+    task: stringOr(raw["task"], ""),
+    task_id,
+    task_version:
+      typeof task_version === "number" || typeof task_version === "string"
+        ? task_version
+        : 0,
+    model: stringOr(raw["model"], ""),
+  };
+};
+
+/**
+ * Normalize a raw `listing.json` (file name → `LogOverview`). Entries that
+ * aren't objects are dropped so one malformed row can't take the listing
+ * down; a non-object listing is treated as empty.
+ */
+export const normalizeLogListing = (
+  raw: unknown
+): Record<string, LogPreview> => {
+  if (!isRecord(raw)) {
+    return {};
+  }
+  const listing: Record<string, LogPreview> = {};
+  for (const [file, entry] of Object.entries(raw)) {
+    if (isRecord(entry)) listing[file] = normalizeLogPreview(entry);
+  }
+  return listing;
 };
 
 /** Normalize a raw `_journal/start.json` payload. */
