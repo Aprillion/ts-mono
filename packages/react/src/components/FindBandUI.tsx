@@ -1,5 +1,11 @@
 import clsx from "clsx";
-import React, { FC, KeyboardEvent, RefObject, useRef } from "react";
+import React, {
+  ChangeEvent,
+  FC,
+  KeyboardEvent,
+  RefObject,
+  useRef,
+} from "react";
 
 import { useComponentIcons } from "./ComponentIconContext";
 import styles from "./FindBandUI.module.css";
@@ -9,11 +15,13 @@ interface FindBandUIProps {
   onNext: () => void;
   onPrevious: () => void;
   onKeyDown?: (e: KeyboardEvent<HTMLInputElement>) => void;
-  onChange?: () => void;
+  onChange?: (e: ChangeEvent<HTMLInputElement>) => void;
   onBeforeInput?: () => void;
   value?: string;
   matchCount?: number;
   matchIndex?: number;
+  /** Shown as "M+": more rows are still loading. */
+  countIncomplete?: boolean;
   noResults?: boolean;
   disableNav?: boolean;
   inputRef?: RefObject<HTMLInputElement | null>;
@@ -29,6 +37,7 @@ export const FindBandUI: FC<FindBandUIProps> = ({
   value,
   matchCount,
   matchIndex,
+  countIncomplete = false,
   noResults = false,
   disableNav,
   inputRef: externalRef,
@@ -53,9 +62,11 @@ export const FindBandUI: FC<FindBandUIProps> = ({
   // noResults wins over the counter: a registered source can report
   // matches that the DOM find can't reach (unsearchable or unrendered
   // content), which would otherwise display as "0 of N".
-  const statusText =
-    !noResults && hasCount && matchCount > 0
-      ? `${matchIndex + 1} of ${matchCount}`
+  // Empty when hidden so the DOM never holds a "No results" nobody saw.
+  const statusText = !showStatus
+    ? ""
+    : !noResults && hasCount && matchCount > 0
+      ? `${matchIndex + 1} of ${matchCount}${countIncomplete ? "+" : ""}`
       : "No results";
 
   // "findBand" (unhashed) is a deliberate public hook for embedders whose CSS

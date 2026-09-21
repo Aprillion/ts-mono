@@ -1,3 +1,4 @@
+import type { Virtualizer } from "@tanstack/react-virtual";
 import clsx from "clsx";
 import {
   useCallback,
@@ -24,6 +25,7 @@ import { useProperty } from "../hooks/useProperty";
 import { useRafThrottle } from "../hooks/useRafThrottle";
 import { useUnmount } from "../hooks/useUnmount";
 
+import { scrollVirtualizerBy } from "./scrollVirtualizerBy";
 import type {
   VirtualListHandle,
   VirtualListProps,
@@ -77,6 +79,16 @@ export const countMatchesInTexts = (
     }
   }
   return total;
+};
+
+const renderedRowElement = (
+  virtualizer: Virtualizer<HTMLElement, Element>,
+  index: number
+): HTMLElement | null => {
+  const el = virtualizer.elementsCache.get(
+    virtualizer.options.getItemKey(index)
+  );
+  return el instanceof HTMLElement ? el : null;
 };
 
 export function VirtualList<T>({
@@ -484,7 +496,7 @@ export function VirtualList<T>({
     (
       index: number,
       align?: "start" | "center" | "end",
-      onDone?: () => void
+      onDone?: (rowElement: HTMLElement | null) => void
     ) => {
       const jump = () =>
         virtualizer.scrollToIndex(index, { align, behavior: "auto" });
@@ -493,18 +505,18 @@ export function VirtualList<T>({
       // can't flip the guard off mid-settle.
       isAutoScrollingRef.current = true;
       cancelAnimationFrame(releaseFrameRef.current);
-      const finish = () => {
+      const finish = (rowElement: HTMLElement | null) => {
         const elNow = getScrollElement();
         if (elNow) lastAutoScrollTopRef.current = elNow.scrollTop;
         releaseFrameRef.current = requestAnimationFrame(() => {
           isAutoScrollingRef.current = false;
         });
-        onDone?.();
+        onDone?.(rowElement);
       };
       jump();
       const el = getScrollElement();
       if (!el) {
-        finish();
+        finish(renderedRowElement(virtualizer, index));
         return;
       }
       cancelAnimationFrame(settleFrameRef.current);
@@ -516,7 +528,7 @@ export function VirtualList<T>({
       const interactionAtStart = interactionSequenceRef.current;
       const settle = () => {
         if (interactionSequenceRef.current !== interactionAtStart) {
-          finish();
+          finish(null);
           return;
         }
         jump();
@@ -525,7 +537,7 @@ export function VirtualList<T>({
         if (stable < 3 && (frames += 1) < 30) {
           settleFrameRef.current = requestAnimationFrame(settle);
         } else {
-          finish();
+          finish(renderedRowElement(virtualizer, index));
         }
       };
       settleFrameRef.current = requestAnimationFrame(settle);
@@ -828,7 +840,24 @@ export function VirtualList<T>({
           align: opts.align,
           behavior,
         });
-        opts.onDone?.();
+        opts.onDone?.(renderedRowElement(virtualizer, opts.index));
+      },
+      scrollBy(deltaPx) {
+        const el = getScrollElement();
+        if (!el) return;
+        // The painter centres from inside onDone, after the settle recorded
+        // its own scrollTop; without taking the guard here the echo of this
+        // write reads as a user scroll and persists a snapshot.
+        isAutoScrollingRef.current = true;
+        cancelAnimationFrame(releaseFrameRef.current);
+        scrollVirtualizerBy(virtualizer, el, deltaPx, scale);
+        lastAutoScrollTopRef.current = el.scrollTop;
+        releaseFrameRef.current = requestAnimationFrame(() => {
+          isAutoScrollingRef.current = false;
+        });
+      },
+      rowElement(index) {
+        return renderedRowElement(virtualizer, index);
       },
       scrollTo(opts) {
         const el = getScrollElement();

@@ -13,6 +13,8 @@ function Harness({ jumpToEnd }: { jumpToEnd: () => void }) {
   const listHandle = useRef<VirtualListHandle | null>({
     scrollToIndex: () => {},
     scrollTo: () => {},
+    scrollBy: () => {},
+    rowElement: () => null,
     getState: () => {},
     jumpToStart: () => {},
     jumpToEnd,

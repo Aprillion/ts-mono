@@ -1,4 +1,5 @@
 import {
+  ChangeEvent,
   FC,
   KeyboardEvent,
   useCallback,
@@ -10,10 +11,17 @@ import {
 import { deepActiveElement, isEditableTarget } from "@tsmono/util";
 
 import { useDebouncedCallback } from "../hooks/useDebouncedCallback";
+import { useOnChange } from "../hooks/useOnChange";
+import { useUnmount } from "../hooks/useUnmount";
 
-import { useExtendedFind } from "./ExtendedFindContext";
+import {
+  useExtendedFind,
+  useFindSource,
+  type FindSource,
+} from "./ExtendedFindContext";
 import { findScrollableParent, scrollRangeToCenter } from "./findBandDom";
 import { FindBandUI } from "./FindBandUI";
+import { createFindPainter, type FindPainter } from "./findPainter";
 import { isFindNextShortcut, isFindShortcut } from "./findShortcuts";
 import { useFindTargetSetter } from "./FindTargetContext";
 
@@ -25,17 +33,21 @@ const findConfig = {
   showDialog: false,
 };
 
+// Peter's type-ahead constants (R11): a one-character term waits longer.
+const kFirstCharDebounceMs = 500;
+const kDebounceMs = 300;
+// Pending target for "last" while the count is incomplete (K124).
+const kLastMatch = Infinity;
+
 interface FindBandProps {
   onClose: () => void;
-  // Type-ahead debounce. Defaults preserve each app's pre-unification value
-  // (inspect 100ms; scout passes 300ms).
-  debounceMs?: number;
 }
 
-export const FindBand: FC<FindBandProps> = ({ onClose, debounceMs = 100 }) => {
+export const FindBand: FC<FindBandProps> = ({ onClose }) => {
   const searchBoxRef = useRef<HTMLInputElement>(null);
   const { extendedFindTerm, countAllMatches, getMatchCountersVersion } =
     useExtendedFind();
+  const source = useFindSource();
   const setFindTarget = useFindTargetSetter();
   const lastFoundItem = useRef<{
     text: string;
@@ -61,19 +73,96 @@ export const FindBand: FC<FindBandProps> = ({ onClose, debounceMs = 100 }) => {
   // still succeed — we use this flag for the "No results" UI instead.
   const [noResults, setNoResults] = useState(false);
 
-  const handleSearch = useCallback(
-    async (back = false, skipKnownMiss = false) => {
-      const thisSearchId = ++searchIdRef.current;
+  // Sourced path, design/find.md; the counter is derived from the source.
+  const painter = useRef<FindPainter | null>(null);
+  const revealId = useRef(0);
+  const [term, setTerm] = useState("");
+  const [pendingOrdinal, setPendingOrdinal] = useState<number | null>(null);
+  const sourced = source && term ? source.count(term) : null;
 
+  // Stable: handleSearch, and the document keydown listener, depend on it.
+  const revealOrdinal = useCallback(
+    (src: FindSource, searchTerm: string, ordinal: number) => {
+      const paint = (painter.current ??= createFindPainter());
+      setCurrentMatchIndex(ordinal);
+      const id = ++revealId.current;
+      src.reveal(searchTerm, ordinal, (landing) => {
+        if (id !== revealId.current) return;
+        if (landing) paint.paint(landing, searchTerm);
+        else paint.clear();
+      });
+    },
+    []
+  );
+
+  const clearMatches = useCallback(() => {
+    setCurrentMatchIndex(0);
+    painter.current?.clear();
+  }, []);
+
+  // Back to the open-but-empty state: no term, no ordinal, no highlights.
+  const resetBand = useCallback(
+    (clearInput = false) => {
+      if (clearInput && searchBoxRef.current) searchBoxRef.current.value = "";
+      if (scrollTimeoutRef.current !== null) {
+        window.clearTimeout(scrollTimeoutRef.current);
+        scrollTimeoutRef.current = null;
+      }
+      currentSearchTerm.current = "";
+      lastFoundItem.current = null;
+      revealId.current++;
+      painter.current?.clear();
+      setTerm("");
+      setPendingOrdinal(null);
+      setMatchCount(null);
+      setCurrentMatchIndex(0);
+      setNoResults(false);
+      setFindTarget(null);
+    },
+    [setFindTarget]
+  );
+
+  const handleSearch = useCallback(
+    async (back = false, auto = false) => {
       const searchTerm = searchBoxRef.current?.value ?? "";
       if (!searchTerm) {
-        setMatchCount(null);
-        setCurrentMatchIndex(0);
-        setNoResults(false);
-        setFindTarget(null);
+        resetBand();
         return;
       }
 
+      if (source) {
+        const termChanged = searchTerm !== term;
+        setPendingOrdinal(null);
+        setNoResults(false);
+        if (auto && !termChanged) return;
+        if (termChanged) {
+          revealId.current++;
+          setTerm(searchTerm);
+          setFindTarget({ term: searchTerm, eventId: "" });
+        }
+        const { total, complete } = source.count(searchTerm);
+        let ordinal = termChanged
+          ? back
+            ? total
+            : 1
+          : back
+            ? currentMatchIndex - 1
+            : currentMatchIndex + 1;
+        if (ordinal < 1) ordinal = complete ? total : kLastMatch;
+        if (ordinal > total && !complete) {
+          setPendingOrdinal(ordinal);
+          source.loadMore?.();
+          return;
+        }
+        if (total === 0) {
+          clearMatches();
+          return;
+        }
+        revealOrdinal(source, searchTerm, ordinal > total ? 1 : ordinal);
+        return;
+      }
+
+      const thisSearchId = ++searchIdRef.current;
       const countersVersion = getMatchCountersVersion();
 
       // Typing more characters onto a term already known to miss can't
@@ -81,7 +170,7 @@ export const FindBand: FC<FindBandProps> = ({ onClose, debounceMs = 100 }) => {
       // full-document scans. Explicit searches (Enter, next/prev) always
       // run, which also re-checks content the version can't track.
       if (
-        skipKnownMiss &&
+        auto &&
         lastNoResult.current &&
         lastNoResult.current.version === countersVersion &&
         searchTerm.startsWith(lastNoResult.current.term)
@@ -207,8 +296,60 @@ export const FindBand: FC<FindBandProps> = ({ onClose, debounceMs = 100 }) => {
 
       focusedElement?.focus();
     },
-    [setFindTarget, extendedFindTerm, countAllMatches, getMatchCountersVersion]
+    [
+      setFindTarget,
+      extendedFindTerm,
+      countAllMatches,
+      getMatchCountersVersion,
+      source,
+      term,
+      currentMatchIndex,
+      revealOrdinal,
+      clearMatches,
+      resetBand,
+    ]
   );
+
+  // Seeded on the first render, not through useOnChange: the band usually
+  // mounts over a tab that already registered its source, and that first
+  // source never arrives as a change.
+  const scope = useRef<string | null>(source?.scopeId ?? null);
+  useOnChange(source, (next) => {
+    // A different document (another sample, another scanner result) or no
+    // source at all: the term, the ordinal and the highlights were about
+    // content that is gone (K125).
+    if (!next) {
+      scope.current = null;
+      resetBand(true);
+      return;
+    }
+    if (next.scopeId !== scope.current) {
+      const hadScope = scope.current !== null;
+      scope.current = next.scopeId;
+      if (hadScope) {
+        resetBand(true);
+        return;
+      }
+    }
+    // A term typed while no source was registered ran the window.find path.
+    if (!term && searchBoxRef.current?.value) {
+      handleSearch(false, true).catch(() => undefined);
+      return;
+    }
+    if (pendingOrdinal === null) return;
+    const { total, complete } = next.count(term);
+    if (pendingOrdinal <= total) {
+      setPendingOrdinal(null);
+      revealOrdinal(next, term, pendingOrdinal);
+    } else if (!complete) {
+      next.loadMore?.();
+    } else {
+      setPendingOrdinal(null);
+      if (total > 0)
+        revealOrdinal(next, term, pendingOrdinal === kLastMatch ? total : 1);
+      else clearMatches();
+    }
+  });
 
   // eslint-disable-next-line tsmono/no-raw-use-effect -- baselined at rule introduction; migrate to a named hook or derived state
   useEffect(() => {
@@ -229,9 +370,13 @@ export const FindBand: FC<FindBandProps> = ({ onClose, debounceMs = 100 }) => {
       if (focusTimeout !== null) {
         window.clearTimeout(focusTimeout);
       }
-      setFindTarget(null);
     };
-  }, [setFindTarget]);
+  }, []);
+  useUnmount(() => {
+    setFindTarget(null);
+    revealId.current++;
+    painter.current?.clear();
+  });
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLInputElement>) => {
@@ -279,10 +424,22 @@ export const FindBand: FC<FindBandProps> = ({ onClose, debounceMs = 100 }) => {
     needsCursorRestoreRef.current = true;
   }, [handleSearch]);
 
-  const handleInputChange = useDebouncedCallback(
+  const searchAfterFirstChar = useDebouncedCallback(
     runDebouncedSearch,
-    debounceMs
+    kFirstCharDebounceMs
   );
+  const searchAfterTyping = useDebouncedCallback(
+    runDebouncedSearch,
+    kDebounceMs
+  );
+  const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const [run, cancel] =
+      e.target.value.length === 1
+        ? [searchAfterFirstChar, searchAfterTyping]
+        : [searchAfterTyping, searchAfterFirstChar];
+    cancel.cancel();
+    run();
+  };
 
   const restoreCursorIfNeeded = useCallback(() => {
     const input = searchBoxRef.current;
@@ -373,13 +530,10 @@ export const FindBand: FC<FindBandProps> = ({ onClose, debounceMs = 100 }) => {
       onKeyDown={handleKeyDown}
       onBeforeInput={handleBeforeInput}
       onChange={handleInputChange}
-      noResults={noResults}
-      matchCount={matchCount ?? undefined}
-      matchIndex={
-        matchCount !== null && matchCount > 0
-          ? currentMatchIndex - 1
-          : undefined
-      }
+      noResults={sourced ? sourced.total === 0 && sourced.complete : noResults}
+      matchCount={sourced ? sourced.total : (matchCount ?? undefined)}
+      matchIndex={currentMatchIndex > 0 ? currentMatchIndex - 1 : undefined}
+      countIncomplete={sourced ? !sourced.complete : false}
     />
   );
 };

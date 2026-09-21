@@ -11,6 +11,10 @@
   --inspect-hint-foreground: var(--bs-secondary-color);
   --inspect-find-background: var(--bs-body-bg);
   --inspect-find-foreground: var(--bs-body-color);
+  --inspect-find-match-background: #ffe066;
+  --inspect-find-match-foreground: #000;
+  --inspect-find-active-background: #ff9632;
+  --inspect-find-active-foreground: #000;
   --inspect-input-background: var(--bs-body-bg);
   --inspect-input-foreground: var(--bs-body-color);
   --inspect-input-border: var(--bs-light-border-subtle);
@@ -1403,4 +1407,21 @@ so disabling selection can break that functionality */
   -webkit-user-select: none;
   -moz-user-select: none;
   -ms-user-select: none;
+}
+
+.vscode-dark {
+  --inspect-find-match-background: #7a5c00;
+  --inspect-find-match-foreground: #fff;
+  --inspect-find-active-background: #b35a00;
+  --inspect-find-active-foreground: #fff;
+}
+
+/* Find band matches; Firefox's ::highlight takes color and background only. */
+::highlight(find-match) {
+  background-color: var(--inspect-find-match-background);
+  color: var(--inspect-find-match-foreground);
+}
+::highlight(find-active) {
+  background-color: var(--inspect-find-active-background);
+  color: var(--inspect-find-active-foreground);
 }

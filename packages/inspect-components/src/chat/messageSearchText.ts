@@ -1,41 +1,68 @@
 import type { Content } from "@tsmono/inspect-common/types";
 
+import type { DisplayMode } from "../content/DisplayModeContext";
+
 import type { ResolvedMessage } from "./messages";
+import { hasVisibleContent } from "./rowsModel";
+import { resolveToolInput, toolCallSearchText } from "./tools/tool";
+import type { ChatViewToolOptions } from "./types";
 
 /**
- * Extracts searchable text from a ResolvedMessage for find-in-page functionality.
+ * The text one Messages row renders, in document order (design/find.md K1):
+ * the role heading, the message content, then each tool-call block with its
+ * output. `ChatMessageRow` is the mirror; `messageCorpus.test.tsx` renders a
+ * row and asserts the two agree.
  */
-export const messageSearchText = (resolved: ResolvedMessage): string[] => {
+export const messageSearchText = (
+  resolved: ResolvedMessage,
+  options: {
+    toolCallStyle?: ChatViewToolOptions["callStyle"];
+    displayMode?: DisplayMode;
+  } = {}
+): string[] => {
+  const toolCallStyle = options.toolCallStyle ?? "complete";
+  const displayMode = options.displayMode ?? "rendered";
+  const message = resolved.message;
+  const toolCalls =
+    toolCallStyle !== "omit" &&
+    message.role === "assistant" &&
+    "tool_calls" in message
+      ? (message.tool_calls ?? [])
+      : [];
   const texts: string[] = [];
 
-  // Extract text from main message content
-  texts.push(...extractContentText(resolved.message.content));
-
-  // Extract tool call info from assistant messages
-  if (
-    resolved.message.role === "assistant" &&
-    "tool_calls" in resolved.message &&
-    resolved.message.tool_calls
-  ) {
-    for (const toolCall of resolved.message.tool_calls) {
-      if (toolCall.function) {
-        texts.push(toolCall.function);
-      }
-      texts.push(JSON.stringify(toolCall.arguments));
-    }
+  // ChatMessageRow drops the message block when tool calls carry the whole
+  // row, and ChatMessage heads every other one with its role.
+  if (toolCalls.length === 0 || hasVisibleContent(message)) {
+    texts.push(
+      message.role === "tool" && message.function
+        ? `${message.role}: ${message.function}`
+        : message.role
+    );
+    texts.push(...extractContentText(message.content));
   }
 
-  // Extract text from tool response messages
-  for (const toolMsg of resolved.toolMessages) {
-    // Tool function name (displayed as "tool: function_name")
-    if (toolMsg.function) {
-      texts.push(toolMsg.function);
+  toolCalls.forEach((toolCall, index) => {
+    // The same pairing ChatMessageRow uses to give a call its output.
+    const toolMessage = toolCall.id
+      ? resolved.toolMessages.find((msg) => msg.tool_call_id === toolCall.id)
+      : resolved.toolMessages[index];
+    if (toolCallStyle === "compact") {
+      texts.push(
+        `tool: ${resolveToolInput(toolCall.function, toolCall.arguments).functionCall}`
+      );
+      return;
     }
-    texts.push(...extractContentText(toolMsg.content));
-    if (toolMsg.error?.message) {
-      texts.push(toolMsg.error.message);
-    }
-  }
+    texts.push(
+      ...toolCallSearchText({
+        fn: toolCall.function,
+        args: toolCall.arguments,
+        view: toolCall.view,
+        toolMessage,
+        displayMode,
+      })
+    );
+  });
 
   return texts;
 };

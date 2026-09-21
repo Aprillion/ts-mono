@@ -11,13 +11,16 @@ import { MessageLabel } from "./MessageLabel";
 import { hasServerToolUse, ResolvedMessage } from "./messages";
 import { hasVisibleContent } from "./rowsModel";
 import { ClientToolCall } from "./tools/ClientToolCall";
-import { resolveToolInput, substituteToolCallContent } from "./tools/tool";
+import {
+  resolveToolInput,
+  resolveToolMessage,
+  substituteToolCallContent,
+} from "./tools/tool";
 import {
   ChatViewDisplayOptions,
   ChatViewLabelOptions,
   ChatViewLinkingOptions,
   ChatViewToolOptions,
-  ContentTool,
 } from "./types";
 
 interface ChatMessageRowProps {
@@ -310,62 +313,17 @@ function chatMessageRowEqual(
   return true;
 }
 
-const resolveToolMessage = (toolMessage?: ChatMessageTool): ContentTool[] => {
-  if (!toolMessage || toolMessage.error) {
-    return [];
-  }
-
-  const content = toolMessage.content;
-  if (typeof content === "string") {
-    return [
-      {
-        type: "tool",
-        content: [
-          {
-            type: "text",
-            text: content,
-            refusal: null,
-            internal: null,
-            citations: null,
-          },
-        ],
-      },
-    ];
-  } else {
-    const result = content
-      .map((con): ContentTool | undefined => {
-        if (typeof con === "string") {
-          return {
-            type: "tool",
-            content: [
-              {
-                type: "text",
-                text: con,
-                refusal: null,
-                internal: null,
-                citations: null,
-              },
-            ],
-          } satisfies ContentTool;
-        } else if (con.type !== "tool_use") {
-          return {
-            content: [con],
-            type: "tool",
-          } satisfies ContentTool;
-        }
-      })
-      .filter((con) => con !== undefined);
-    return result;
-  }
-};
-
 const ToolCallViewCompact: FC<{
   idx: number;
   functionCall: string;
 }> = ({ idx, functionCall }) => {
   return (
     <div key={`tool-call-${idx}`}>
-      <code className={clsx(styles.codeCompact)}>tool: {functionCall}</code>
+      {/* One text node, so a term spanning the prefix and the call is painted
+          exactly where the find corpus counts it (design/find.md K1). */}
+      <code
+        className={clsx(styles.codeCompact)}
+      >{`tool: ${functionCall}`}</code>
     </div>
   );
 };

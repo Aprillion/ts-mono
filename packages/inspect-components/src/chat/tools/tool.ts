@@ -1,7 +1,95 @@
-import type { ToolCallContent } from "@tsmono/inspect-common/types";
+import type {
+  ChatMessageTool,
+  ToolCallContent,
+} from "@tsmono/inspect-common/types";
 import { isRecord } from "@tsmono/util";
 
+import type { DisplayMode } from "../../content/DisplayModeContext";
+import type { ContentTool } from "../types";
+
 export const kToolTodoContentType = "agent/todo-list";
+
+// Guard against invalid tool views (e.g., malformed bash tool content
+// from older log files).
+export const isValidToolView = (view: ToolCallContent): boolean =>
+  view.content !== "```bash\nbash\n```\n";
+
+export type CustomToolView = "answer" | "submit" | "toolSearch";
+
+/** Which default custom view a tool-call block renders instead of the
+ *  ToolBlock, or undefined for the ToolBlock path. `getDefaultCustomToolView`,
+ *  the `data-unsearchable` marking and the find corpus all ask this one
+ *  question, so "the two corpora hide the same views" holds by construction
+ *  (design/find.md K1). */
+export const defaultCustomToolView = (
+  tool: string,
+  output: unknown
+): CustomToolView | undefined => {
+  if (tool === "answer") return "answer";
+  if (tool === "submit") return "submit";
+  if (tool === "tool_search" && parseToolSearchCatalog(output)) {
+    return "toolSearch";
+  }
+  return undefined;
+};
+
+/** The custom views the find corpus mirrors; the rest are unsearchable. */
+export const kMirroredCustomViews = new Set<CustomToolView>([
+  "answer",
+  "submit",
+]);
+
+/** The tool response as the output well's content items. */
+export const resolveToolMessage = (
+  toolMessage?: ChatMessageTool
+): ContentTool[] => {
+  if (!toolMessage || toolMessage.error) {
+    return [];
+  }
+
+  const content = toolMessage.content;
+  if (typeof content === "string") {
+    return [
+      {
+        type: "tool",
+        content: [
+          {
+            type: "text",
+            text: content,
+            refusal: null,
+            internal: null,
+            citations: null,
+          },
+        ],
+      },
+    ];
+  } else {
+    const result = content
+      .map((con): ContentTool | undefined => {
+        if (typeof con === "string") {
+          return {
+            type: "tool",
+            content: [
+              {
+                type: "text",
+                text: con,
+                refusal: null,
+                internal: null,
+                citations: null,
+              },
+            ],
+          } satisfies ContentTool;
+        } else if (con.type !== "tool_use") {
+          return {
+            content: [con],
+            type: "tool",
+          } satisfies ContentTool;
+        }
+      })
+      .filter((con) => con !== undefined);
+    return result;
+  }
+};
 
 /* Per-tool header icons (Bootstrap Icons classes) for the tool block
    grammar. Keyed by the tool names Inspect and the common CLI agents emit. */
@@ -86,6 +174,97 @@ export interface ToolCallResult {
   description?: string;
   contentType?: string;
 }
+
+/** Args longer than this can't meaningfully summarize on the single header
+ * line; they render in the input zone instead. */
+export const kMaxSummaryArgs = 120;
+
+/** The args portion of the rendered function call with formatting preserved;
+ * collapse whitespace for the single-line header summary. */
+export const fullArgs = (
+  functionCall: string,
+  tool: string
+): string | undefined => {
+  if (functionCall.startsWith(`${tool}(`) && functionCall.endsWith(")")) {
+    const inner = functionCall.slice(tool.length + 1, -1).trim();
+    return inner.length > 0 ? inner : undefined;
+  }
+  return functionCall !== tool ? functionCall : undefined;
+};
+
+/**
+ * The strings one tool-call block renders, in document order, mirroring
+ * `ClientToolCall`: either its custom view, or the ToolBlock header, summary,
+ * input zone and output well. The find counter reads these so its ordinal
+ * lines up with the ranges the painter builds from the DOM (design/find.md
+ * K1); `messageCorpus.test.tsx` renders a row and compares the two.
+ */
+export const toolCallSearchText = (call: {
+  fn: string;
+  args: Record<string, unknown>;
+  view?: ToolCallContent | null;
+  toolMessage?: ChatMessageTool;
+  /** Custom views and the Codex output reshape are rendered-mode only. */
+  displayMode: DisplayMode;
+}): string[] => {
+  const { name, title, functionCall, input, description } = resolveToolInput(
+    call.fn,
+    call.args
+  );
+  const view = call.view
+    ? substituteToolCallContent(call.view, call.args)
+    : undefined;
+  const output = resolveToolMessage(call.toolMessage);
+
+  // A custom view replaces the whole block, output well included.
+  const rendered = call.displayMode === "rendered";
+  const customView = rendered ? defaultCustomToolView(name, output) : undefined;
+  if (customView === "answer") return [functionCall];
+  if (customView === "submit") {
+    return ["submit", toolOutputText(output) ?? toolOutputText(input) ?? ""];
+  }
+  if (customView !== undefined) {
+    // Not mirrored, so ClientToolCall marks it unsearchable: neither corpus
+    // holds it, rather than one holding a match the other cannot paint.
+    return [];
+  }
+
+  const header = view?.title || title || name;
+  const hasInput =
+    (input !== undefined && input !== null && input !== "") || !!view?.content;
+  const argsBody = hasInput ? undefined : fullArgs(functionCall, header);
+  const argsSummary = argsBody?.replace(/\s+/g, " ").trim();
+  const argsInInputZone = !!argsSummary && argsSummary.length > kMaxSummaryArgs;
+  const summary = description ?? (argsInInputZone ? undefined : argsSummary);
+  const body =
+    view && isValidToolView(view)
+      ? view.content
+      : hasInput
+        ? input
+        : argsInInputZone
+          ? argsBody
+          : undefined;
+
+  const texts = [header];
+  if (summary) texts.push(summary);
+  const bodyText =
+    body === undefined
+      ? ""
+      : typeof body === "string"
+        ? body
+        : JSON.stringify(body);
+  if (bodyText) texts.push(bodyText);
+  const errorMessage = call.toolMessage?.error?.message;
+  if (errorMessage) texts.push(errorMessage);
+  else {
+    // ToolCallView reshapes some Codex results before rendering them.
+    const outputText = rendered
+      ? (codexToolMarkdown(name, output) ?? toolOutputText(output))
+      : toolOutputText(output);
+    if (outputText) texts.push(outputText);
+  }
+  return texts;
+};
 
 /**
  * Resolves the input and metadata for a given tool call.

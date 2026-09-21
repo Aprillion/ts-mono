@@ -32,6 +32,10 @@
   margin-top: auto;
   margin-bottom: auto;
   margin-right: 0.5em;
+  /* Right-anchored band: reserve room for the widest counter, "123 of 4567",
+     so the input does not shift as the counter changes. */
+  min-width: 11ch;
+  text-align: right;
   white-space: nowrap;
   color: var(--inspect-find-foreground);
   opacity: 0.7;

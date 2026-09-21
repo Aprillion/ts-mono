@@ -17,9 +17,14 @@ export interface VirtualListHandle {
     index: number;
     align?: "start" | "center" | "end";
     behavior?: "auto" | "smooth";
-    onDone?: () => void;
+    /** The row's element once settled; null if unrendered or interrupted. */
+    onDone?: (rowElement: HTMLElement | null) => void;
   }): void;
   scrollTo(opts: { top: number; behavior?: "auto" | "smooth" }): void;
+  /** DOM-pixel delta through the virtualizer, dropping its index anchor. */
+  scrollBy(deltaPx: number): void;
+  /** The rendered row's element, or null while it is not in the DOM. */
+  rowElement(index: number): HTMLElement | null;
   getState(callback: (snapshot: VirtualListStateSnapshot) => void): void;
   jumpToStart(): void;
   jumpToEnd(): void;

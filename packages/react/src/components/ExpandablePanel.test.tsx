@@ -111,6 +111,11 @@ describe("ExpandablePanel auto-expand on find target", () => {
       expectTruncated: false,
     },
     {
+      name: "target matching under the browser fold (wöndering) → expanded",
+      target: { term: "wöndering", eventId: "e1" },
+      expectTruncated: false,
+    },
+    {
       name: "non-matching target → truncated",
       target: { term: "absent-term-xyz", eventId: "e1" },
       expectTruncated: true,

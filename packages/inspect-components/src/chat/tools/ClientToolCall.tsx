@@ -12,7 +12,13 @@ import { useDisplayMode } from "../../content/DisplayModeContext";
 import { AnnotatedScreenshotOutput } from "./AnnotatedScreenshot";
 import styles from "./ClientToolCall.module.css";
 import { getDefaultCustomToolView } from "./customToolRendering";
-import { iconForTool } from "./tool";
+import {
+  defaultCustomToolView,
+  fullArgs,
+  iconForTool,
+  kMaxSummaryArgs,
+  kMirroredCustomViews,
+} from "./tool";
 import { ToolBlock, ToolBlockInput, ToolBlockOutput } from "./ToolBlock";
 import { ToolCallErrorView } from "./ToolCallErrorView";
 import { ToolCallView, ToolCallViewProps } from "./ToolCallView";
@@ -73,12 +79,25 @@ export const ClientToolCall: FC<ClientToolCallProps> = ({
     selfAnnotation,
     inputScreenshot,
   };
+  const appView =
+    displayMode === "rendered" ? getCustomToolView?.(viewProps) : undefined;
   const customView =
     displayMode === "rendered"
-      ? (getCustomToolView?.(viewProps) ?? getDefaultCustomToolView(viewProps))
+      ? (appView ?? getDefaultCustomToolView(viewProps))
       : undefined;
   if (customView) {
-    return <div className={clsx(styles.custom, className)}>{customView}</div>;
+    // Only the views the find corpus mirrors stay searchable; see K1. A view
+    // an app supplied is never one of them.
+    const kind = appView ? undefined : defaultCustomToolView(tool, output);
+    const mirrored = kind !== undefined && kMirroredCustomViews.has(kind);
+    return (
+      <div
+        data-unsearchable={mirrored ? undefined : "true"}
+        className={clsx(styles.custom, className)}
+      >
+        {customView}
+      </div>
+    );
   }
 
   const hasInput =
@@ -141,20 +160,6 @@ export const ClientToolCall: FC<ClientToolCallProps> = ({
       ) : null}
     </ToolBlock>
   );
-};
-
-/** Args longer than this can't meaningfully summarize on the single header
- * line; they render in the input zone instead. */
-const kMaxSummaryArgs = 120;
-
-/** The args portion of the rendered function call with formatting preserved;
- * collapse whitespace for the single-line header summary. */
-const fullArgs = (functionCall: string, tool: string): string | undefined => {
-  if (functionCall.startsWith(`${tool}(`) && functionCall.endsWith(")")) {
-    const inner = functionCall.slice(tool.length + 1, -1).trim();
-    return inner.length > 0 ? inner : undefined;
-  }
-  return functionCall !== tool ? functionCall : undefined;
 };
 
 /** Whether the tool output has anything worth an output well. */

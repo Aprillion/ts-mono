@@ -117,12 +117,10 @@ export const ChatMessage: FC<ChatMessageProps> = memo(function ChatMessage({
       )}
     >
       <div>
-        {message.role}
-        {message.role === "tool"
-          ? message.function
-            ? `: ${message.function}`
-            : ""
-          : ""}
+        {/* One text node: the find corpus counts the heading as one string. */}
+        {message.role === "tool" && message.function
+          ? `${message.role}: ${message.function}`
+          : message.role}
         {linkingEnabled && messageUrl ? (
           <CopyButton
             icon={linkIcon}
@@ -136,7 +134,13 @@ export const ChatMessage: FC<ChatMessageProps> = memo(function ChatMessage({
       {(message.timestamp && formatDateTime) || label ? (
         <div className={styles.headerEnd}>
           {message.timestamp && formatDateTime && (
-            <span className={styles.timestamp} title={message.timestamp}>
+            // The host supplies formatDateTime, so the data side cannot
+            // reproduce this string to count it (design/find.md K1).
+            <span
+              data-unsearchable="true"
+              className={styles.timestamp}
+              title={message.timestamp}
+            >
               {formatDateTime(new Date(message.timestamp))}
             </span>
           )}
