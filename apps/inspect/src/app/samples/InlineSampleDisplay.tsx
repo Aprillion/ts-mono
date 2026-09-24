@@ -2,7 +2,11 @@ import clsx from "clsx";
 import { FC, RefObject, useEffect, useRef } from "react";
 
 import { ErrorPanel } from "@tsmono/react/components";
-import { useStatefulScrollPosition, useVisitId } from "@tsmono/react/hooks";
+import {
+  useOnChange,
+  useStatefulScrollPosition,
+  useVisitId,
+} from "@tsmono/react/hooks";
 
 import { kSampleMessagesTabId, kSampleTranscriptTabId } from "../../constants";
 import { useSelectedEvalSampleData } from "../../state/hooks";
@@ -53,6 +57,15 @@ export const InlineSampleDisplay: FC<InlineSampleDisplayProps> = ({
     `inline-sample-scroller-${visitId}-${sampleTab}`,
     1000,
     !isVirtualizedTab
+  );
+
+  // Another tab or sample cannot show the current match, so the band closes
+  // (K125). This is the one owner: every route that can search a sample mounts
+  // this component, and the band is open over it on all of them.
+  const hideFind = useStore((state) => state.appActions.hideFind);
+  useOnChange(
+    `${sampleTab}/${logFile}/${sampleHandle?.id}/${sampleHandle?.epoch}`,
+    hideFind
   );
 
   // A new visit starts at the top: the scroller survives sample hops (same
