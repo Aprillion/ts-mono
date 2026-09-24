@@ -7,7 +7,11 @@ import {
 } from "@tsmono/react/components";
 
 import styles from "./customToolRendering.module.css";
-import { parseToolSearchCatalog, toolOutputText } from "./tool";
+import {
+  defaultCustomToolView,
+  parseToolSearchCatalog,
+  toolOutputText,
+} from "./tool";
 import type { ToolCallViewProps } from "./ToolCallView";
 import { ToolSearchView } from "./ToolSearchView";
 import { ToolTitle } from "./ToolTitle";
@@ -19,19 +23,20 @@ import { ToolTitle } from "./ToolTitle";
 export const getDefaultCustomToolView = (
   props: ToolCallViewProps
 ): ReactNode | undefined => {
-  if (props.tool === "answer") {
-    return <AnswerToolCallView {...props} />;
-  }
-  if (props.tool === "submit") {
-    return <SubmitToolCallView {...props} />;
-  }
-  if (props.tool === "tool_search") {
-    const namespaces = parseToolSearchCatalog(props.output);
-    if (namespaces) {
-      return <ToolSearchView namespaces={namespaces} />;
+  switch (defaultCustomToolView(props.tool, props.output)) {
+    case "answer":
+      return <AnswerToolCallView {...props} />;
+    case "submit":
+      return <SubmitToolCallView {...props} />;
+    case "toolSearch": {
+      const namespaces = parseToolSearchCatalog(props.output);
+      return namespaces ? (
+        <ToolSearchView namespaces={namespaces} />
+      ) : undefined;
     }
+    default:
+      return undefined;
   }
-  return undefined;
 };
 
 const AnswerToolCallView: FC<ToolCallViewProps> = (props) => {

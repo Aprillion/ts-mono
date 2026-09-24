@@ -1,7 +1,88 @@
-import type { ToolCallContent } from "@tsmono/inspect-common/types";
+import type {
+  ChatMessageTool,
+  ToolCallContent,
+} from "@tsmono/inspect-common/types";
 import { isRecord } from "@tsmono/util";
 
+import type { ContentTool } from "../types";
+
 export const kToolTodoContentType = "agent/todo-list";
+
+// Guard against invalid tool views (e.g., malformed bash tool content
+// from older log files).
+export const isValidToolView = (view: ToolCallContent): boolean =>
+  view.content !== "```bash\nbash\n```\n";
+
+export type CustomToolView = "answer" | "submit" | "toolSearch";
+
+/** Which default custom view a tool-call block renders instead of the
+ *  ToolBlock, or undefined for the ToolBlock path. `getDefaultCustomToolView`,
+ *  the `data-unsearchable` marking and the find corpus all ask this one
+ *  question, so "the two corpora hide the same views" holds by construction
+ *  (design/find.md K1). */
+export const defaultCustomToolView = (
+  tool: string,
+  output: unknown
+): CustomToolView | undefined => {
+  if (tool === "answer") return "answer";
+  if (tool === "submit") return "submit";
+  if (tool === "tool_search" && parseToolSearchCatalog(output)) {
+    return "toolSearch";
+  }
+  return undefined;
+};
+
+/** The tool response as the output well's content items. */
+export const resolveToolMessage = (
+  toolMessage?: ChatMessageTool
+): ContentTool[] => {
+  if (!toolMessage || toolMessage.error) {
+    return [];
+  }
+
+  const content = toolMessage.content;
+  if (typeof content === "string") {
+    return [
+      {
+        type: "tool",
+        content: [
+          {
+            type: "text",
+            text: content,
+            refusal: null,
+            internal: null,
+            citations: null,
+          },
+        ],
+      },
+    ];
+  } else {
+    const result = content
+      .map((con): ContentTool | undefined => {
+        if (typeof con === "string") {
+          return {
+            type: "tool",
+            content: [
+              {
+                type: "text",
+                text: con,
+                refusal: null,
+                internal: null,
+                citations: null,
+              },
+            ],
+          } satisfies ContentTool;
+        } else if (con.type !== "tool_use") {
+          return {
+            content: [con],
+            type: "tool",
+          } satisfies ContentTool;
+        }
+      })
+      .filter((con) => con !== undefined);
+    return result;
+  }
+};
 
 /* Per-tool header icons (Bootstrap Icons classes) for the tool block
    grammar. Keyed by the tool names Inspect and the common CLI agents emit. */
@@ -86,6 +167,23 @@ export interface ToolCallResult {
   description?: string;
   contentType?: string;
 }
+
+/** Args longer than this can't meaningfully summarize on the single header
+ * line; they render in the input zone instead. */
+export const kMaxSummaryArgs = 120;
+
+/** The args portion of the rendered function call with formatting preserved;
+ * collapse whitespace for the single-line header summary. */
+export const fullArgs = (
+  functionCall: string,
+  tool: string
+): string | undefined => {
+  if (functionCall.startsWith(`${tool}(`) && functionCall.endsWith(")")) {
+    const inner = functionCall.slice(tool.length + 1, -1).trim();
+    return inner.length > 0 ? inner : undefined;
+  }
+  return functionCall !== tool ? functionCall : undefined;
+};
 
 /**
  * Resolves the input and metadata for a given tool call.

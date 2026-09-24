@@ -6,7 +6,7 @@ import { usePrismHighlight } from "@tsmono/react/hooks";
 
 import { RenderedText } from "../../content/RenderedText";
 
-import { kToolTodoContentType } from "./tool";
+import { isValidToolView, kToolTodoContentType } from "./tool";
 import { TodoWriteInput } from "./tool-input/TodoWriteInput";
 import styles from "./ToolInput.module.css";
 
@@ -20,7 +20,7 @@ export const ToolInput: FC<ToolInputProps> = (props) => {
   const { contentType, contents, toolCallView, className } = props;
 
   const sourceCodeRef = useRef<HTMLDivElement | null>(null);
-  const useToolView = toolCallView && isValidView(toolCallView);
+  const useToolView = toolCallView && isValidToolView(toolCallView);
 
   const sourceCodeLength = useToolView
     ? toolCallView.content.length
@@ -94,13 +94,4 @@ const RenderTool: FC<RenderToolProps> = ({
       </pre>
     </div>
   );
-};
-
-// Guard against invalid tool views (e.g., malformed bash tool content
-// from older log files).
-const isValidView = (view: ToolCallContent): boolean => {
-  if (view.content === "```bash\nbash\n```\n") {
-    return false;
-  }
-  return true;
 };
