@@ -1,10 +1,13 @@
 // @vitest-environment jsdom
-import { render } from "@testing-library/react";
+import { render, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { testAssistantMessage } from "@tsmono/inspect-common/testing";
 import type { ChatMessage } from "@tsmono/inspect-common/types";
-import { ExtendedFindProvider } from "@tsmono/react/components";
+import {
+  ExtendedFindProvider,
+  useExtendedFind,
+} from "@tsmono/react/components";
 import { ComponentStateProvider } from "@tsmono/react/state";
 import { makeReactiveStateStore } from "@tsmono/react/testing";
 
@@ -122,5 +125,23 @@ describe("ChatViewVirtualList live-follow ownership", () => {
         followRequested: true,
       })
     ).toBe(true);
+  });
+});
+
+describe("ChatViewVirtualList find registration", () => {
+  it("leaves the legacy counter alone, because it registers a FindSource", () => {
+    const { result } = renderHook(() => useExtendedFind(), {
+      wrapper: ({ children }) => (
+        <ComponentStateProvider hooks={makeReactiveStateStore().hooks}>
+          <ExtendedFindProvider>
+            {children}
+            <ChatViewVirtualList id="chat" messages={messages} />
+          </ExtendedFindProvider>
+        </ComponentStateProvider>
+      ),
+    });
+    // "role" is a key of the default JSON.stringify accessor and appears in no
+    // rendered text: a non-zero count means the list opted into the legacy path.
+    expect(result.current.countAllMatches("role")).toBe(0);
   });
 });

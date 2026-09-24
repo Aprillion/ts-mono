@@ -1,9 +1,12 @@
 // @vitest-environment jsdom
-import { render } from "@testing-library/react";
+import { render, renderHook } from "@testing-library/react";
 import { createRef, type ReactNode, type RefObject } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ExtendedFindProvider } from "../components/ExtendedFindContext";
+import {
+  ExtendedFindProvider,
+  useExtendedFind,
+} from "../components/ExtendedFindContext";
 import {
   ComponentStateHooks,
   ComponentStateProvider,
@@ -565,6 +568,37 @@ describe("VirtualList rowElement", () => {
     rerender(ui([]));
     expect(handle.current?.rowElement(0)).toBeNull();
     unmount();
+  });
+});
+
+describe("VirtualList find registration", () => {
+  // Rows beyond the render window are unreachable for window.find; the list
+  // registers its data with the find context so the counter and the
+  // scroll-to-match still cover them (the tabs without a FindSource).
+  const countThrough = (props: { findScope?: "local" | "none" }) => {
+    const { result } = renderHook(() => useExtendedFind(), {
+      wrapper: ({ children }) => (
+        <Wrapper hooks={makeStateHooks()}>
+          {children}
+          <VirtualList<string>
+            persistenceKey="find-registration-list"
+            data={["alpha", "beta needle", "needle and needle"]}
+            renderRow={(_i, item) => <div>{item}</div>}
+            itemSearchText={(item) => item}
+            {...props}
+          />
+        </Wrapper>
+      ),
+    });
+    return result.current.countAllMatches("needle");
+  };
+
+  it("counts matches in data the list has not rendered", () => {
+    expect(countThrough({})).toBe(3);
+  });
+
+  it("stays out of the count when its scope is none", () => {
+    expect(countThrough({ findScope: "none" })).toBe(0);
   });
 });
 

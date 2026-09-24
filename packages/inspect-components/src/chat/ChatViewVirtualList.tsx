@@ -30,7 +30,6 @@ import { LoadingEventsIndicator } from "../indicators/LoadingEventsIndicator";
 import { ChatMessageRow } from "./ChatMessageRow";
 import styles from "./ChatViewVirtualList.module.css";
 import { computeMaxLabelLength } from "./labelLength";
-import { messageSearchText } from "./messageSearchText";
 import {
   buildMessageRows,
   messageRowOptions,
@@ -43,6 +42,7 @@ import {
   ChatViewLinkingOptions,
   ChatViewToolOptions,
 } from "./types";
+import { useMessagesFindSource } from "./useMessagesFindSource";
 
 // Stable Item wrapper defined at module scope so its identity is constant
 // across re-renders — a new component identity each render forces the
@@ -139,6 +139,14 @@ export const ChatViewRowsVirtualList: FC<ChatViewRowsVirtualListProps> = memo(
       listHandle,
       scrollRef,
       itemCount: rows.length,
+    });
+
+    useMessagesFindSource({
+      rows,
+      listHandle,
+      hasMoreRows,
+      onLoadMoreRows,
+      loading: backfilling,
     });
 
     // The near-end trigger re-checks on scroll AND when rows grow: a landing
@@ -238,11 +246,6 @@ export const ChatViewRowsVirtualList: FC<ChatViewRowsVirtualListProps> = memo(
       ]
     );
 
-    const rowSearchText = useCallback(
-      (item: MessageRow): string | string[] => messageSearchText(item.resolved),
-      []
-    );
-
     // Show a placeholder instead of a blank tab when there's nothing to
     // render: a running sample may have no messages yet (before its first
     // message event arrives), and a finished one may be empty (e.g. an early
@@ -274,7 +277,9 @@ export const ChatViewRowsVirtualList: FC<ChatViewRowsVirtualListProps> = memo(
         scrollToTopOnFinish={scrollToTopOnFinish}
         components={chatComponents}
         smoothScroll={false}
-        itemSearchText={rowSearchText}
+        // This list registers a FindSource, so the band never takes the
+        // legacy path over it (design/find.md).
+        findScope="none"
         showProgress={hasMoreRows}
         onVisibleRangeChange={handleVisibleRangeChange}
       />
