@@ -45,6 +45,7 @@ export * from "./FindTargetContext";
 export * from "./FindBand";
 export * from "./FindBandUI";
 export * from "./findFold";
+export * from "./findPainter";
 export * from "./useFindBandShortcut";
 export * from "./MarkdownDivWithReferences";
 export * from "./NextPreviousNav";
