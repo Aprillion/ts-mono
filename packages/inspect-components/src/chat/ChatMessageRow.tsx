@@ -319,7 +319,11 @@ const ToolCallViewCompact: FC<{
 }> = ({ idx, functionCall }) => {
   return (
     <div key={`tool-call-${idx}`}>
-      <code className={clsx(styles.codeCompact)}>tool: {functionCall}</code>
+      {/* One text node, so a term spanning the prefix and the call is painted
+          exactly where the find corpus counts it (design/find.md K1). */}
+      <code
+        className={clsx(styles.codeCompact)}
+      >{`tool: ${functionCall}`}</code>
     </div>
   );
 };

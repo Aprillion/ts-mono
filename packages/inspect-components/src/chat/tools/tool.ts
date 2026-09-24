@@ -4,6 +4,7 @@ import type {
 } from "@tsmono/inspect-common/types";
 import { isRecord } from "@tsmono/util";
 
+import type { DisplayMode } from "../../content/DisplayModeContext";
 import type { ContentTool } from "../types";
 
 export const kToolTodoContentType = "agent/todo-list";
@@ -31,6 +32,12 @@ export const defaultCustomToolView = (
   }
   return undefined;
 };
+
+/** The custom views the find corpus mirrors; the rest are unsearchable. */
+export const kMirroredCustomViews = new Set<CustomToolView>([
+  "answer",
+  "submit",
+]);
 
 /** The tool response as the output well's content items. */
 export const resolveToolMessage = (
@@ -183,6 +190,80 @@ export const fullArgs = (
     return inner.length > 0 ? inner : undefined;
   }
   return functionCall !== tool ? functionCall : undefined;
+};
+
+/**
+ * The strings one tool-call block renders, in document order, mirroring
+ * `ClientToolCall`: either its custom view, or the ToolBlock header, summary,
+ * input zone and output well. The find counter reads these so its ordinal
+ * lines up with the ranges the painter builds from the DOM (design/find.md
+ * K1); `messageCorpus.test.tsx` renders a row and compares the two.
+ */
+export const toolCallSearchText = (call: {
+  fn: string;
+  args: Record<string, unknown>;
+  view?: ToolCallContent | null;
+  toolMessage?: ChatMessageTool;
+  /** Custom views and the Codex output reshape are rendered-mode only. */
+  displayMode: DisplayMode;
+}): string[] => {
+  const { name, title, functionCall, input, description } = resolveToolInput(
+    call.fn,
+    call.args
+  );
+  const view = call.view
+    ? substituteToolCallContent(call.view, call.args)
+    : undefined;
+  const output = resolveToolMessage(call.toolMessage);
+
+  // A custom view replaces the whole block, output well included.
+  const rendered = call.displayMode === "rendered";
+  const customView = rendered ? defaultCustomToolView(name, output) : undefined;
+  if (customView === "answer") return [functionCall];
+  if (customView === "submit") {
+    return ["submit", toolOutputText(output) ?? toolOutputText(input) ?? ""];
+  }
+  if (customView !== undefined) {
+    // Not mirrored, so ClientToolCall marks it unsearchable: neither corpus
+    // holds it, rather than one holding a match the other cannot paint.
+    return [];
+  }
+
+  const header = view?.title || title || name;
+  const hasInput =
+    (input !== undefined && input !== null && input !== "") || !!view?.content;
+  const argsBody = hasInput ? undefined : fullArgs(functionCall, header);
+  const argsSummary = argsBody?.replace(/\s+/g, " ").trim();
+  const argsInInputZone = !!argsSummary && argsSummary.length > kMaxSummaryArgs;
+  const summary = description ?? (argsInInputZone ? undefined : argsSummary);
+  const body =
+    view && isValidToolView(view)
+      ? view.content
+      : hasInput
+        ? input
+        : argsInInputZone
+          ? argsBody
+          : undefined;
+
+  const texts = [header];
+  if (summary) texts.push(summary);
+  const bodyText =
+    body === undefined
+      ? ""
+      : typeof body === "string"
+        ? body
+        : JSON.stringify(body);
+  if (bodyText) texts.push(bodyText);
+  const errorMessage = call.toolMessage?.error?.message;
+  if (errorMessage) texts.push(errorMessage);
+  else {
+    // ToolCallView reshapes some Codex results before rendering them.
+    const outputText = rendered
+      ? (codexToolMarkdown(name, output) ?? toolOutputText(output))
+      : toolOutputText(output);
+    if (outputText) texts.push(outputText);
+  }
+  return texts;
 };
 
 /**

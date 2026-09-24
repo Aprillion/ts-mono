@@ -147,6 +147,7 @@ export const ChatViewRowsVirtualList: FC<ChatViewRowsVirtualListProps> = memo(
       hasMoreRows,
       onLoadMoreRows,
       loading: backfilling,
+      toolCallStyle: tools?.callStyle,
     });
 
     // The near-end trigger re-checks on scroll AND when rows grow: a landing

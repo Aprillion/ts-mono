@@ -41,10 +41,13 @@ export const MessageLabel: FC<MessageLabelProps> = ({
   );
   const title = text === label ? undefined : label;
 
+  // A position chip is navigation ornament, not message content: the find
+  // counter has no row text to count it against (design/find.md K1).
   if (onActivate) {
     return (
       <button
         type="button"
+        data-unsearchable="true"
         className={classes}
         onClick={onActivate}
         title={title}
@@ -55,7 +58,7 @@ export const MessageLabel: FC<MessageLabelProps> = ({
   }
 
   return (
-    <span className={classes} title={title}>
+    <span data-unsearchable="true" className={classes} title={title}>
       {text}
     </span>
   );

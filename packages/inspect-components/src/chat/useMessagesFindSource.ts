@@ -9,9 +9,12 @@ import {
 import { useOnChange, useRegistration } from "@tsmono/react/hooks";
 import type { VirtualListHandle } from "@tsmono/react/virtual";
 
+import { useDisplayMode } from "../content/DisplayModeContext";
+
 import { messageSearchText } from "./messageSearchText";
 import { locateOrdinal, rowMatchCounts } from "./messagesFind";
 import type { MessageRow } from "./rowsModel";
+import type { ChatViewToolOptions } from "./types";
 
 interface MessagesFindSourceOptions {
   rows: MessageRow[];
@@ -20,6 +23,8 @@ interface MessagesFindSourceOptions {
   onLoadMoreRows?: () => void;
   /** Rows still arriving with no page to request (first read, backfill). */
   loading?: boolean;
+  /** What the rows render, so the counted text matches the painted text (K1). */
+  toolCallStyle?: ChatViewToolOptions["callStyle"];
 }
 
 /** The Messages tab's FindSource (design/find.md), registered while mounted. */
@@ -29,11 +34,14 @@ export const useMessagesFindSource = ({
   hasMoreRows = false,
   onLoadMoreRows,
   loading = false,
+  toolCallStyle,
 }: MessagesFindSourceOptions): void => {
   // React Compiler would hoist the per-source count cache below into one slot
   // shared by every source, serving the first page's counts for all of them.
   "use no memo";
   const find = useExtendedFindOptional();
+  // A context, not a prop: the rows this counts render under the same one.
+  const displayMode = useDisplayMode();
   // Band state, not source state: a re-registration (paging, backfill) must
   // not re-run the list for a term already revealed, but a closed band has
   // collapsed the panels again, so the next reveal goes through the list.
@@ -44,7 +52,9 @@ export const useMessagesFindSource = ({
   // Registered through an effect: a new object per render would re-register.
   const source = useMemo<FindSource>(() => {
     const foldedRows = rows.map((row) =>
-      messageSearchText(row.resolved).map(foldText)
+      messageSearchText(row.resolved, { toolCallStyle, displayMode }).map(
+        foldText
+      )
     );
     // A one-slot Map, not a reassigned `let`: the compiler's lint rejects a
     // binding written after render, and the memo is opted out of it anyway.
@@ -94,6 +104,14 @@ export const useMessagesFindSource = ({
       },
       loadMore: hasMoreRows ? onLoadMoreRows : undefined,
     };
-  }, [rows, hasMoreRows, onLoadMoreRows, loading, listHandle]);
+  }, [
+    rows,
+    hasMoreRows,
+    onLoadMoreRows,
+    loading,
+    listHandle,
+    toolCallStyle,
+    displayMode,
+  ]);
   useRegistration(find?.registerFindSource, source);
 };
