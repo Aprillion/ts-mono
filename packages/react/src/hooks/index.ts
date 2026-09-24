@@ -30,6 +30,8 @@ export * from "./useInterval";
 export * from "./useLatestRef";
 export * from "./useMirrorToStore";
 export * from "./useMountEffect";
+export * from "./useOnChange";
+export * from "./useRegistration";
 export * from "./useOnClickOutside";
 export * from "./useTimeout";
 export * from "./useUnmount";
