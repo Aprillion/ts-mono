@@ -14,6 +14,7 @@ import {
   makeStateHooks,
 } from "../test/component-state-hooks";
 
+import type { VirtualListHandle } from "./types";
 import { VirtualList } from "./VirtualList";
 
 const Wrapper: React.FC<{
@@ -529,5 +530,121 @@ describe("VirtualList embedded in a shared scroll container", () => {
     ).map((row) => Number(row.dataset.itemIndex));
     expect(Math.min(...indices)).toBeGreaterThan(0);
     unmount();
+  });
+});
+
+describe("VirtualList rowElement", () => {
+  // virtual-core sizes the scroller and its rows from offsetHeight, which
+  // jsdom reports as 0 — no row would render.
+  beforeEach(() => {
+    Object.defineProperty(HTMLElement.prototype, "offsetHeight", {
+      configurable: true,
+      get: () => 100,
+    });
+  });
+  afterEach(() => {
+    Reflect.deleteProperty(HTMLElement.prototype, "offsetHeight");
+  });
+
+  it("tracks a row's mount and unmount", () => {
+    const handle = createRef<VirtualListHandle>();
+    const ui = (data: string[]) => (
+      <Wrapper hooks={makeStateHooks()}>
+        <VirtualList<string>
+          ref={handle}
+          persistenceKey="row-element-list"
+          data={data}
+          renderRow={(_i, item) => <div>{item}</div>}
+        />
+      </Wrapper>
+    );
+    const { rerender, unmount } = render(ui(["a", "b"]));
+
+    expect(handle.current?.rowElement(0)?.textContent).toBe("a");
+
+    rerender(ui([]));
+    expect(handle.current?.rowElement(0)).toBeNull();
+    unmount();
+  });
+});
+
+describe("VirtualList scrollBy", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    Object.defineProperty(HTMLElement.prototype, "offsetHeight", {
+      configurable: true,
+      get: () => 100,
+    });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    Reflect.deleteProperty(HTMLElement.prototype, "offsetHeight");
+  });
+
+  it("does not persist the painter's centring as a user scroll", () => {
+    const { hooks, store } = makeReactiveStateStore();
+    const handle = createRef<VirtualListHandle>();
+    const scrollRef = createRef<HTMLDivElement>();
+    render(
+      <Wrapper hooks={hooks}>
+        <div ref={scrollRef}>
+          <VirtualList<string>
+            ref={handle}
+            persistenceKey="scrollby-list"
+            scrollRef={scrollRef}
+            data={Array.from({ length: 50 }, (_, i) => `row ${i}`)}
+            renderRow={(_i, item) => <div>{item}</div>}
+          />
+        </div>
+      </Wrapper>
+    );
+    const el = scrollRef.current;
+    if (!el) throw new Error("no scroller");
+    let top = 0;
+    Object.defineProperty(el, "scrollTop", {
+      configurable: true,
+      get: () => top,
+      set: (value: number) => {
+        top = value;
+      },
+    });
+    Object.defineProperty(el, "scrollHeight", {
+      value: 5000,
+      configurable: true,
+    });
+    Object.defineProperty(el, "clientHeight", {
+      value: 200,
+      configurable: true,
+    });
+    // The file-wide stub makes scrollTo a no-op; the virtualizer writes here.
+    Object.defineProperty(el, "scrollTo", {
+      configurable: true,
+      value: (options: { top: number }) => {
+        top = options.top;
+      },
+    });
+
+    // Let the mount's own scroll settle finish before the painter's call.
+    vi.advanceTimersByTime(400);
+
+    // The real order: the reveal settles and records its scrollTop, then the
+    // painter centres the occurrence from inside onDone.
+    handle.current?.scrollToIndex({
+      index: 20,
+      align: "start",
+      onDone: () => handle.current?.scrollBy(120),
+    });
+    vi.advanceTimersByTime(400);
+    el.dispatchEvent(new Event("scroll"));
+    vi.advanceTimersByTime(400);
+
+    expect(top).toBeGreaterThan(0);
+    expect(store.get("scrollby-list::snapshot")).toBeUndefined();
+
+    // Control: a real user scroll on the same list does persist.
+    top += 900;
+    el.dispatchEvent(new Event("scroll"));
+    vi.advanceTimersByTime(400);
+    expect(store.get("scrollby-list::snapshot")).toBeDefined();
   });
 });

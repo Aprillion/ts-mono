@@ -51,9 +51,11 @@ vi.mock("./TranscriptVirtualList", () => ({
   }) => {
     listHandle.current = {
       scrollToIndex: ({ onDone }) => {
-        onDone?.();
+        onDone?.(null);
       },
       scrollTo: () => {},
+      scrollBy: () => {},
+      rowElement: () => null,
       getState: () => {},
       jumpToStart: () => {},
       jumpToEnd: () => {},
