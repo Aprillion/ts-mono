@@ -13,6 +13,7 @@ import {
 import { useCollapsedState, useResizeObserver } from "../hooks";
 
 import styles from "./ExpandablePanel.module.css";
+import { foldText } from "./findFold";
 import { useFindTarget } from "./FindTargetContext";
 
 interface ExpandablePanelProps {
@@ -91,8 +92,8 @@ export const ExpandablePanel: FC<ExpandablePanelProps> = memo(
         return;
       }
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-      const text = (root.textContent ?? "").toLowerCase();
-      setContainsFindTarget(text.includes(findTarget.term.toLowerCase()));
+      const text = foldText(root.textContent ?? "");
+      setContainsFindTarget(text.includes(foldText(findTarget.term)));
     });
 
     const effectiveCollapsed = containsFindTarget ? false : collapsed;
