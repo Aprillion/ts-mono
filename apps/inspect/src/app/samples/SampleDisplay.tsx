@@ -198,9 +198,10 @@ export const SampleDisplay: FC<SampleDisplayProps> = ({
   // later return to the same sample (or a hop to a sibling) can never
   // restore this visit's offsets — a fresh visit starts at the top.
   const visitHandle = useStore((state) => state.log.selectedSampleHandle);
-  const visitId = useVisitId(
-    `${visitHandle?.logFile}-${visitHandle?.id}-${visitHandle?.epoch}`
-  );
+  // Names the sample, not the visit: the find band starts over on a different
+  // sample, not on a return to the same one.
+  const sampleScopeId = `${visitHandle?.logFile}-${visitHandle?.id}-${visitHandle?.epoch}`;
+  const visitId = useVisitId(sampleScopeId);
   const transcriptListId = `${baseId}-transcript-display-${id}-${visitId}`;
   const chatListId = `${baseId}-chat-${id}-${visitId}`;
   const removeBagsByPrefix = useStore(
@@ -1084,6 +1085,7 @@ export const SampleDisplay: FC<SampleDisplayProps> = ({
                   <ChatViewRowsVirtualList
                     key={chatListId}
                     id={chatListId}
+                    findScopeId={sampleScopeId}
                     rows={sampleMessages.rows.data ?? kNoMessageRows}
                     hasMoreRows={sampleMessages.hasMore}
                     onLoadMoreRows={sampleMessages.loadMore}

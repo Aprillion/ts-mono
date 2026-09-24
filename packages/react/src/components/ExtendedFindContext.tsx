@@ -43,6 +43,9 @@ export interface FindLanding {
 
 /** A tab's find engine; contract and states in design/find.md. */
 export interface FindSource {
+  /** What is being searched — a sample, a scanner result. The band starts
+   *  over when a source registers with a different one. */
+  scopeId: string;
   count(term: string): FindCount;
   /** Null when the row of the 1-based `ordinal` is not rendered. */
   reveal(

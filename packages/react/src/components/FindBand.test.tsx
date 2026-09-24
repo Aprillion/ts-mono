@@ -57,7 +57,7 @@ const SourceRegistration: FC<{ source: FindSource }> = ({ source }) => {
  *  holding `rendered` occurrences of the term. */
 const fakeSource = (
   rowCounts: number[] | Record<string, number[]>,
-  options: { complete?: boolean; rendered?: number } = {}
+  options: { complete?: boolean; rendered?: number; scopeId?: string } = {}
 ) => {
   const countsOf = (term: string) =>
     Array.isArray(rowCounts) ? rowCounts : (rowCounts[term] ?? []);
@@ -90,6 +90,7 @@ const fakeSource = (
   );
   const loadMore = vi.fn();
   const source: FindSource = {
+    scopeId: options.scopeId ?? "scope",
     count: (term) => ({
       total: totalOf(term),
       complete: options.complete ?? true,
@@ -883,6 +884,34 @@ describe("FindBand", () => {
         register: (next: FindSource | null) => view.rerender(ui(next, true)),
       };
     };
+
+    it("starts over when a source for another document registers", async () => {
+      const first = fakeSource([2], { scopeId: "sample-1" });
+      const { input, register } = openOverSource(first.source);
+      fireEvent.keyDown(input, { key: "Enter" });
+      await waitFor(() => expect(statusText()).toBe("1 of 2"));
+      expect(highlighted("find-match")).toBe(1);
+
+      const other = fakeSource([2, 2], { scopeId: "sample-2" });
+      register(other.source);
+
+      await waitFor(() => expect(status().style.visibility).toBe("hidden"));
+      expect(input.value).toBe("");
+      expect(highlighted("find-match")).toBe(0);
+      expect(other.reveal).not.toHaveBeenCalled();
+    });
+
+    it("keeps the term when the same document re-registers", async () => {
+      const { input, register } = openOverSource(
+        fakeSource([2], { scopeId: "sample-1" }).source
+      );
+      fireEvent.keyDown(input, { key: "Enter" });
+      await waitFor(() => expect(statusText()).toBe("1 of 2"));
+
+      register(fakeSource([2, 2], { scopeId: "sample-1" }).source);
+      await waitFor(() => expect(statusText()).toBe("1 of 4"));
+      expect(input.value).toBe("needle");
+    });
 
     it("starts over when the source leaves without a replacement", async () => {
       const { input, register } = openOverSource(fakeSource([2]).source);

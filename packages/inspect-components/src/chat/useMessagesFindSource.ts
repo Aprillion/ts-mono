@@ -18,6 +18,8 @@ import type { ChatViewToolOptions } from "./types";
 
 interface MessagesFindSourceOptions {
   rows: MessageRow[];
+  /** The document these rows belong to; the band starts over when it changes. */
+  scopeId: string;
   listHandle: RefObject<VirtualListHandle | null>;
   hasMoreRows?: boolean;
   onLoadMoreRows?: () => void;
@@ -30,6 +32,7 @@ interface MessagesFindSourceOptions {
 /** The Messages tab's FindSource (design/find.md), registered while mounted. */
 export const useMessagesFindSource = ({
   rows,
+  scopeId,
   listHandle,
   hasMoreRows = false,
   onLoadMoreRows,
@@ -71,6 +74,7 @@ export const useMessagesFindSource = ({
       return entry;
     };
     return {
+      scopeId,
       count: (term) => ({
         total: countsFor(term).total,
         complete: !hasMoreRows && !loading,
@@ -106,6 +110,7 @@ export const useMessagesFindSource = ({
     };
   }, [
     rows,
+    scopeId,
     hasMoreRows,
     onLoadMoreRows,
     loading,

@@ -60,7 +60,7 @@ const mountSource = (
   );
   const view = renderHook(
     (props: typeof initial) => {
-      useMessagesFindSource({ listHandle, ...props });
+      useMessagesFindSource({ listHandle, scopeId: "test-scope", ...props });
       return { source: useFindSource(), setTarget: useFindTargetSetter() };
     },
     { wrapper, initialProps: initial }

@@ -310,12 +310,26 @@ export const FindBand: FC<FindBandProps> = ({ onClose }) => {
     ]
   );
 
+  // Seeded on the first render, not through useOnChange: the band usually
+  // mounts over a tab that already registered its source, and that first
+  // source never arrives as a change.
+  const scope = useRef<string | null>(source?.scopeId ?? null);
   useOnChange(source, (next) => {
-    // No source at all: the term, the ordinal and the highlights were about
+    // A different document (another sample, another scanner result) or no
+    // source at all: the term, the ordinal and the highlights were about
     // content that is gone (K125).
     if (!next) {
+      scope.current = null;
       resetBand(true);
       return;
+    }
+    if (next.scopeId !== scope.current) {
+      const hadScope = scope.current !== null;
+      scope.current = next.scopeId;
+      if (hadScope) {
+        resetBand(true);
+        return;
+      }
     }
     // A term typed while no source was registered ran the window.find path.
     if (!term && searchBoxRef.current?.value) {

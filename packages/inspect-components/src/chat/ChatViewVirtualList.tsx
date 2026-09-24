@@ -98,6 +98,9 @@ export interface ChatViewRowsVirtualListProps {
   labels?: ChatViewLabelOptions;
   linking?: ChatViewLinkingOptions;
   tools?: ChatViewToolOptions;
+  /** The document these messages belong to. The find band starts over when it
+   *  changes, so it must name the document and nothing else (no visit id). */
+  findScopeId: string;
 }
 
 /**
@@ -123,6 +126,7 @@ export const ChatViewRowsVirtualList: FC<ChatViewRowsVirtualListProps> = memo(
     labels,
     linking,
     tools,
+    findScopeId,
   }: ChatViewRowsVirtualListProps) {
     const listHandle = useRef<VirtualListHandle>(null);
 
@@ -148,6 +152,7 @@ export const ChatViewRowsVirtualList: FC<ChatViewRowsVirtualListProps> = memo(
       onLoadMoreRows,
       loading: backfilling,
       toolCallStyle: tools?.callStyle,
+      scopeId: findScopeId,
     });
 
     // The near-end trigger re-checks on scroll AND when rows grow: a landing

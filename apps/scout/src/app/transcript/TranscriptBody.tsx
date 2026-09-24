@@ -451,6 +451,7 @@ export const TranscriptBody: FC<TranscriptBodyProps> = ({
           <div className={styles.chatList}>
             <ChatViewVirtualList
               id={`transcript-${visitId}`}
+              findScopeId={transcript.transcript_id}
               messages={transcript.messages}
               initialMessageId={messageParam}
               scrollRef={scrollRef}

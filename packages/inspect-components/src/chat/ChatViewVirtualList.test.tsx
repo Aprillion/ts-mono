@@ -38,7 +38,12 @@ function mountFollow(props: {
   render(
     <ComponentStateProvider hooks={hooks}>
       <ExtendedFindProvider>
-        <ChatViewVirtualList id="chat" messages={messages} {...props} />
+        <ChatViewVirtualList
+          id="chat"
+          findScopeId="doc"
+          messages={messages}
+          {...props}
+        />
       </ExtendedFindProvider>
     </ComponentStateProvider>
   );
@@ -65,7 +70,7 @@ describe("ChatViewRowsVirtualList paging", () => {
     const ui = (p: typeof props) => (
       <ComponentStateProvider hooks={hooks}>
         <ExtendedFindProvider>
-          <ChatViewRowsVirtualList id="chat" {...p} />
+          <ChatViewRowsVirtualList id="chat" findScopeId="doc" {...p} />
         </ExtendedFindProvider>
       </ComponentStateProvider>
     );
@@ -135,7 +140,11 @@ describe("ChatViewVirtualList find registration", () => {
         <ComponentStateProvider hooks={makeReactiveStateStore().hooks}>
           <ExtendedFindProvider>
             {children}
-            <ChatViewVirtualList id="chat" messages={messages} />
+            <ChatViewVirtualList
+              id="chat"
+              findScopeId="doc"
+              messages={messages}
+            />
           </ExtendedFindProvider>
         </ComponentStateProvider>
       ),

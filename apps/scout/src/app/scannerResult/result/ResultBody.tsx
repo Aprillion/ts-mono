@@ -66,6 +66,7 @@ export const ResultBody: FC<ResultBodyProps> = ({ resultData, inputData }) => {
       <div ref={scrollRef} className={clsx(styles.scrollable)}>
         <InputRenderer
           resultData={resultData}
+          findScopeId={resultData.identifier}
           inputData={inputData}
           scrollRef={scrollRef}
           initialMessageId={initialMessageId}
@@ -83,6 +84,9 @@ export const ResultBody: FC<ResultBodyProps> = ({ resultData, inputData }) => {
 interface InputRendererProps {
   className?: string | string[];
   resultData?: ScanResultData;
+  /** The result whose input this renders; the find band starts over when it
+   *  changes, so it comes from the row, never from the input that loads later. */
+  findScopeId: string;
   inputData: ScannerInput;
   scrollRef: React.RefObject<HTMLDivElement | null>;
   initialMessageId?: string | null;
@@ -105,6 +109,7 @@ const containerClass = (
 
 const InputRenderer: FC<InputRendererProps> = ({
   resultData,
+  findScopeId,
   inputData,
   className,
   scrollRef,
@@ -128,6 +133,7 @@ const InputRenderer: FC<InputRendererProps> = ({
         <ChatViewVirtualList
           messages={inputData.input.messages}
           id={"scan-input-virtual-list"}
+          findScopeId={findScopeId}
           display={{ indented: true }}
           className={className}
           scrollRef={scrollRef}
@@ -157,6 +163,7 @@ const InputRenderer: FC<InputRendererProps> = ({
       <ChatViewVirtualList
         messages={inputData.input}
         id={"scan-input-virtual-list"}
+        findScopeId={findScopeId}
         display={{ indented: true }}
         className={className}
         scrollRef={scrollRef}
@@ -168,6 +175,7 @@ const InputRenderer: FC<InputRendererProps> = ({
       <ChatViewVirtualList
         messages={[inputData.input]}
         id={"scan-input-virtual-list"}
+        findScopeId={findScopeId}
         display={{ indented: true }}
         className={className}
         scrollRef={scrollRef}
